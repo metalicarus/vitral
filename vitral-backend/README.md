@@ -1,6 +1,6 @@
-# Vitral
+# Vitral · Servidor
 
-**Suas fotos, no seu servidor.** O Vitral é um gerenciador de fotos e vídeos self-hosted e totalmente open source: você instala em um servidor seu, envia suas fotos e navega por elas pelo navegador, sem entregar sua biblioteca a terceiros.
+Este é o servidor do [Vitral](../README.md). **Suas fotos, no seu servidor.** O Vitral é um gerenciador de fotos e vídeos self-hosted e totalmente open source: você instala em um servidor seu, envia suas fotos e navega por elas pelo navegador, sem entregar sua biblioteca a terceiros.
 
 > **Status:** em desenvolvimento inicial (marco M0). Ainda não há versão utilizável.
 
@@ -96,14 +96,14 @@ Arquivos de pastas monitoradas são catalogados no lugar: o Vitral só lê, nunc
 | Metadados | metadata-extractor, com ExifTool para casos difíceis |
 | Imagens | libvips (com libheif para HEIC), chamado como processo externo |
 | Vídeo | FFmpeg, chamado como processo externo |
-| Interface web | SvelteKit, compilada junto com o servidor via Quarkus Quinoa |
+| Interface web | SvelteKit, em [`vitral-frontend/`](../README.md) (planejado) |
 | Build | Maven |
 | Implantação | Docker Compose, imagens para amd64 e arm64 |
 
 ## Estrutura do repositório
 
 ```
-vitral/
+vitral-backend/
 ├── server/                    # Servidor Quarkus (Maven)
 │   └── src/main/java/dev/vitral/
 │       ├── common/            # Erros da API
@@ -117,7 +117,6 @@ vitral/
 │       ├── storage/           # (M1) Acesso à biblioteca em disco
 │       ├── timeline/          # (M2) Linha do tempo e busca
 │       └── album/             # (M2) Álbuns e compartilhamento
-├── web/                       # (M2) Interface web (SvelteKit)
 ├── docs/adr/                  # Registros de decisões de arquitetura
 ├── docker/                    # Dockerfile
 ├── docker-compose.yml
@@ -200,4 +199,4 @@ Contribuições são bem-vindas. As regras ficarão em `CONTRIBUTING.md`; os com
 
 ## Licença
 
-[AGPL-3.0](LICENSE) (proposta).
+[AGPL-3.0](../LICENSE) (proposta).
