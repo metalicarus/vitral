@@ -1,0 +1,300 @@
+{
+  "_type": "export",
+  "__export_format": 4,
+  "__export_date": "2026-10-20T12:00:00.000Z",
+  "__export_source": "vitral",
+  "resources": [
+    {
+      "_id": "wrk_vitral",
+      "_type": "workspace",
+      "parentId": null,
+      "name": "Vitral API",
+      "scope": "collection",
+      "description": "Requisições da API do Vitral (marco M0). Depois do setup ou do login, copie o token da resposta para a variável token do ambiente."
+    },
+    {
+      "_id": "env_vitral_base",
+      "_type": "environment",
+      "parentId": "wrk_vitral",
+      "name": "Base Environment",
+      "data": {
+        "base_url": "http://localhost:8080",
+        "token": "",
+        "session_id": ""
+      },
+      "dataPropertyOrder": {
+        "&": [
+          "base_url",
+          "token",
+          "session_id"
+        ]
+      },
+      "color": null,
+      "isPrivate": false,
+      "metaSortKey": 1
+    },
+    {
+      "_id": "fld_server",
+      "_type": "request_group",
+      "parentId": "wrk_vitral",
+      "name": "1. Servidor",
+      "description": "Rotas públicas, sem autenticação.",
+      "environment": {},
+      "metaSortKey": -990
+    },
+    {
+      "_id": "req_server_info",
+      "_type": "request",
+      "parentId": "fld_server",
+      "name": "Informações do servidor",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/server/info",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {},
+      "description": "Nome, versão e se o servidor ainda precisa do setup inicial (setupRequired).",
+      "metaSortKey": -980,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_health",
+      "_type": "request",
+      "parentId": "fld_server",
+      "name": "Saúde do servidor",
+      "method": "GET",
+      "url": "{{ _.base_url }}/q/health",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {},
+      "description": "Verificação de saúde do Quarkus, incluindo a conexão com o banco.",
+      "metaSortKey": -970,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_openapi",
+      "_type": "request",
+      "parentId": "fld_server",
+      "name": "Especificação OpenAPI",
+      "method": "GET",
+      "url": "{{ _.base_url }}/q/openapi?format=json",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {},
+      "description": "Documento OpenAPI gerado pelo Quarkus.",
+      "metaSortKey": -960,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "fld_setup",
+      "_type": "request_group",
+      "parentId": "wrk_vitral",
+      "name": "2. Setup inicial",
+      "description": "Executado uma única vez, quando o servidor ainda não tem usuários.",
+      "environment": {},
+      "metaSortKey": -950
+    },
+    {
+      "_id": "req_setup",
+      "_type": "request",
+      "parentId": "fld_setup",
+      "name": "Criar administrador",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/setup",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"admin@example.com\",\n  \"displayName\": \"Admin\",\n  \"password\": \"senha-forte-123\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "description": "Cria o primeiro usuário como administrador e já devolve um token. Responde 201 na primeira vez e 409 (setup_done) depois disso. A senha precisa ter pelo menos 8 caracteres.",
+      "metaSortKey": -940,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "fld_auth",
+      "_type": "request_group",
+      "parentId": "wrk_vitral",
+      "name": "3. Autenticação",
+      "description": "Login, logout e sessões. Cada login cria uma sessão por aparelho.",
+      "environment": {},
+      "metaSortKey": -930
+    },
+    {
+      "_id": "req_login",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Login",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/login",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"admin@example.com\",\n  \"password\": \"senha-forte-123\",\n  \"deviceName\": \"Insomnia\"\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {},
+      "description": "Devolve um token para a variável token do ambiente. Erra 401 (invalid_credentials) com senha errada e 429 (login_locked) depois de 5 tentativas erradas em 15 minutos. deviceName é opcional.",
+      "metaSortKey": -920,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_sessions",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Listar sessões",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/auth/sessions",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Aparelhos conectados à conta. O campo current indica a sessão usada nesta requisição. Copie um id para a variável session_id para encerrar essa sessão.",
+      "metaSortKey": -910,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_revoke_session",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Encerrar uma sessão",
+      "method": "DELETE",
+      "url": "{{ _.base_url }}/api/v1/auth/sessions/{{ _.session_id }}",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Desconecta um aparelho, por exemplo um celular perdido. Responde 204, ou 404 se a sessão não existir ou for de outro usuário.",
+      "metaSortKey": -900,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_logout",
+      "_type": "request",
+      "parentId": "fld_auth",
+      "name": "Logout",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/auth/logout",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Encerra a sessão do token atual. Responde 204; depois disso o token deixa de funcionar.",
+      "metaSortKey": -890,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "fld_users",
+      "_type": "request_group",
+      "parentId": "wrk_vitral",
+      "name": "4. Usuários",
+      "description": "Dados do usuário autenticado.",
+      "environment": {},
+      "metaSortKey": -880
+    },
+    {
+      "_id": "req_me",
+      "_type": "request",
+      "parentId": "fld_users",
+      "name": "Meu usuário",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/users/me",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Dados do dono do token. Responde 401 sem token ou com token inválido.",
+      "metaSortKey": -870,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "fld_admin",
+      "_type": "request_group",
+      "parentId": "wrk_vitral",
+      "name": "5. Administração",
+      "description": "Exige um token de administrador; usuários comuns recebem 403.",
+      "environment": {},
+      "metaSortKey": -860
+    },
+    {
+      "_id": "req_admin_list",
+      "_type": "request",
+      "parentId": "fld_admin",
+      "name": "Listar usuários",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/admin/users",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Todos os usuários do servidor, do mais antigo para o mais novo.",
+      "metaSortKey": -850,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_admin_create",
+      "_type": "request",
+      "parentId": "fld_admin",
+      "name": "Criar usuário",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/admin/users",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"email\": \"maria@example.com\",\n  \"displayName\": \"Maria\",\n  \"password\": \"outra-senha-456\",\n  \"admin\": false\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Cria um usuário. Com admin igual a true, ele também vira administrador. Responde 409 (email_taken) se o e-mail já existir.",
+      "metaSortKey": -840,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    }
+  ]
+}

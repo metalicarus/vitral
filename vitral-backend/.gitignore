@@ -1,0 +1,17 @@
+# Build
+target/
+
+# IDEs
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Ambiente local
+.env
+data/
+
+# Interface web
+node_modules/
