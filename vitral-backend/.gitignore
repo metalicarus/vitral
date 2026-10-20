@@ -13,5 +13,10 @@ target/
 .env
 data/
 
+# Banco SQLite local
+*.db
+*.db-wal
+*.db-shm
+
 # Interface web
 node_modules/

@@ -38,7 +38,7 @@ flowchart TB
     end
 
     pasta[("Pasta sincronizada<br/>somente leitura para o Vitral")]
-    db[("PostgreSQL + pgvector<br/>catálogo e fila de tarefas")]
+    db[("SQLite<br/>catálogo e fila de tarefas")]
     disco[("Biblioteca em disco<br/>originais, miniaturas e prévias")]
     tools["Ferramentas externas<br/>libvips · FFmpeg · ExifTool"]
     ia["IA local<br/>ONNX Runtime na JVM"]:::futuro
@@ -90,9 +90,9 @@ Arquivos de pastas monitoradas são catalogados no lugar: o Vitral só lê, nunc
 | Framework | Quarkus 3.33 LTS, em modo JVM (modo nativo como opção futura) |
 | API | Quarkus REST (Jakarta REST) com documentação OpenAPI |
 | Persistência | Hibernate ORM com Panache e migrações com Flyway |
-| Banco de dados | PostgreSQL com pgvector |
+| Banco de dados | SQLite em arquivo único, modo WAL |
 | Senhas | Argon2id (Bouncy Castle), no formato PHC |
-| Tarefas em segundo plano | JobRunr, com a fila guardada no próprio PostgreSQL |
+| Tarefas em segundo plano | JobRunr, com a fila guardada no próprio SQLite |
 | Metadados | metadata-extractor, com ExifTool para casos difíceis |
 | Imagens | libvips (com libheif para HEIC), chamado como processo externo |
 | Vídeo | FFmpeg, chamado como processo externo |
@@ -120,7 +120,6 @@ vitral-backend/
 ├── docs/adr/                  # Registros de decisões de arquitetura
 ├── docker/                    # Dockerfile
 ├── docker-compose.yml
-├── .env.example
 └── README.md
 ```
 
@@ -130,7 +129,7 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 
 **M0 · Fundação**
 - [ ] Repositório, licença, CI e Docker Compose
-- [ ] Esqueleto do servidor Quarkus com PostgreSQL e Flyway
+- [ ] Esqueleto do servidor Quarkus com SQLite e Flyway
 - [ ] Contas, login e sessões
 
 **M1 · Ingestão**
@@ -157,22 +156,22 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 
 ## Requisitos para rodar (planejado)
 
-- Docker e Docker Compose
+- Java 25, ou Docker se preferir rodar em contêiner
 - 2 núcleos de CPU e 4 GB de RAM
 - Processador amd64 ou arm64
 
 ## Desenvolvimento
 
-Pré-requisitos: JDK 25, Maven 3.9 ou mais recente e Docker.
+Pré-requisitos: JDK 25 e Maven 3.9 ou mais recente. Não é preciso Docker nem banco instalado.
 
 ```bash
 cd server
 mvn quarkus:dev
 ```
 
-Com o Docker rodando, o Quarkus sobe sozinho um PostgreSQL de desenvolvimento (Dev Services) e aplica as migrações. A API fica em `http://localhost:8080` e a documentação interativa em `http://localhost:8080/q/swagger-ui`.
+O banco é um arquivo SQLite, `vitral.db`, criado em `server/` na primeira execução, com as migrações aplicadas automaticamente. A API fica em `http://localhost:8080` e a documentação interativa em `http://localhost:8080/q/swagger-ui`.
 
-Para rodar os testes, use `mvn test` (o teste de ponta a ponta também usa o Docker). Para gerar o Maven Wrapper (`./mvnw`), rode `mvn wrapper:wrapper` uma vez.
+Para rodar os testes, use `mvn test`; eles usam um banco descartável em `target/`. Para gerar o Maven Wrapper (`./mvnw`), rode `mvn wrapper:wrapper` uma vez.
 
 ### Primeiros passos com a API
 
@@ -186,12 +185,23 @@ curl -X POST http://localhost:8080/api/v1/setup \
 curl http://localhost:8080/api/v1/users/me -H 'Authorization: Bearer SEU_TOKEN'
 ```
 
+### Rodando sem Docker
+
+```bash
+cd server
+mvn package
+VITRAL_DB_PATH=/caminho/para/vitral.db java -jar target/quarkus-app/quarkus-run.jar
+```
+
+A pasta de `VITRAL_DB_PATH` precisa existir. Sem a variável, o banco é criado no diretório atual.
+
 ### Rodando com Docker Compose
 
 ```bash
-cp .env.example .env     # troque a senha do banco no .env
 docker compose up -d --build
 ```
+
+O banco fica no volume `vitral-data`.
 
 ## Contribuindo
 

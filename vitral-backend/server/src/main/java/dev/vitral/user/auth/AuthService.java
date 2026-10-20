@@ -51,8 +51,8 @@ public class AuthService {
     /** Creates the first administrator. Works only while the server has no users. */
     @Transactional
     public LoginResult setup(String email, String displayName, String password) {
-        // Serializes concurrent setup attempts, so only one first admin can ever be created.
-        User.getEntityManager().createNativeQuery("LOCK TABLE users IN EXCLUSIVE MODE").executeUpdate();
+        // Transactions start with BEGIN IMMEDIATE (see application.properties), so SQLite
+        // runs concurrent setup attempts one after the other: only the first creates an admin.
         if (User.count() > 0) {
             throw ApiException.conflict("setup_done", "The server is already set up.");
         }

@@ -11,7 +11,7 @@ import static org.hamcrest.Matchers.is;
 
 /**
  * End-to-end check of the first run: setup, login, roles and sessions.
- * Runs against a real PostgreSQL started by Quarkus Dev Services (Docker required).
+ * Runs against a real SQLite file in target/, recreated by Flyway on every run.
  */
 @QuarkusTest
 class AuthFlowTest {

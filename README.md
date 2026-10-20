@@ -22,7 +22,7 @@ Mais adiante, um app mobile vai cuidar do backup automático do celular, usando 
 
 ## Começando
 
-O servidor é a única parte que já existe. Com JDK 25, Maven e Docker instalados:
+O servidor é a única parte que já existe. Com JDK 25 e Maven instalados (não é preciso Docker nem banco de dados):
 
 ```bash
 cd vitral-backend/server
