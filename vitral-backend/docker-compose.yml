@@ -6,7 +6,7 @@ services:
     ports:
       - "8080:8080"
     volumes:
-      # The SQLite database file (vitral.db) is kept here.
+      # Database, photo library and temporary uploads.
       - vitral-data:/data
     restart: unless-stopped
 

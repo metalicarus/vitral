@@ -15,8 +15,8 @@ COPY --from=build /build/target/quarkus-app/app/ ./app/
 COPY --from=build /build/target/quarkus-app/quarkus/ ./quarkus/
 RUN useradd --system --uid 1001 vitral && mkdir /data && chown vitral /data
 USER vitral
-# The SQLite database lives in /data; mount a volume there to keep it.
-ENV VITRAL_DB_PATH=/data/vitral.db
+# Database, photo library and temporary uploads live in /data; mount a volume there to keep them.
+ENV VITRAL_DATA_DIR=/data
 VOLUME /data
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "quarkus-run.jar"]

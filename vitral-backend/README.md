@@ -111,10 +111,10 @@ vitral-backend/
 │       ├── system/            # Informações públicas do servidor
 │       ├── user/              # Usuários e administração
 │       │   └── auth/          # Login, sessões e setup inicial
-│       ├── asset/             # (M1) Itens: fotos, vídeos e arquivos derivados
+│       ├── asset/             # Itens: fotos, vídeos e o upload
 │       ├── ingest/            # (M1) Upload tus, pastas monitoradas, importação
-│       ├── media/             # (M1) Metadados, miniaturas e vídeo
-│       ├── storage/           # (M1) Acesso à biblioteca em disco
+│       ├── media/             # Formatos, metadados e, no M1, miniaturas e vídeo
+│       ├── storage/           # A biblioteca em disco
 │       ├── timeline/          # (M2) Linha do tempo e busca
 │       └── album/             # (M2) Álbuns e compartilhamento
 ├── docs/adr/                  # Registros de decisões de arquitetura
@@ -153,6 +153,7 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 - [ ] IA local: rostos, pessoas e busca semântica
 - [ ] Duplicatas, memórias e edição básica não destrutiva
 - [ ] Live Photos, RAW, armazenamento S3 e login via OIDC
+- [ ] Exportação e importação do banco de dados pela API, restrita a administradores
 
 ## Requisitos para rodar (planejado)
 
@@ -169,7 +170,7 @@ cd server
 mvn quarkus:dev
 ```
 
-O banco é um arquivo SQLite, `vitral.db`, criado em `server/` na primeira execução, com as migrações aplicadas automaticamente. A API fica em `http://localhost:8080` e a documentação interativa em `http://localhost:8080/q/swagger-ui`.
+Os dados ficam em `server/data/`, criada na primeira execução: o banco SQLite (`vitral.db`), a biblioteca de fotos (`library/`) e os uploads em andamento (`tmp/`). As migrações são aplicadas automaticamente. A API fica em `http://localhost:8080` e a documentação interativa em `http://localhost:8080/q/swagger-ui`.
 
 Para rodar os testes, use `mvn test`; eles usam um banco descartável em `target/`. Para gerar o Maven Wrapper (`./mvnw`), rode `mvn wrapper:wrapper` uma vez.
 
@@ -183,17 +184,31 @@ curl -X POST http://localhost:8080/api/v1/setup \
 
 # Use o token retornado nas próximas chamadas
 curl http://localhost:8080/api/v1/users/me -H 'Authorization: Bearer SEU_TOKEN'
+
+# Envia uma foto (fileModifiedAt é opcional e serve de data quando a foto não tem EXIF)
+curl -X POST http://localhost:8080/api/v1/assets \
+  -H 'Authorization: Bearer SEU_TOKEN' \
+  -F 'file=@IMG_1234.HEIC' \
+  -F 'fileModifiedAt=2024-07-14T19:32:10Z'
 ```
+
+### Configuração
+
+| Variável de ambiente | Padrão | Para que serve |
+| --- | --- | --- |
+| `VITRAL_DATA_DIR` | `data` | Pasta com o banco, a biblioteca de fotos e os uploads temporários |
+| `VITRAL_TIME_ZONE` | Fuso do sistema | Fuso usado para fotos sem fuso no EXIF e para as pastas de ano e mês |
+| `VITRAL_UPLOAD_MAX_SIZE` | `4G` | Maior arquivo aceito por envio |
 
 ### Rodando sem Docker
 
 ```bash
 cd server
 mvn package
-VITRAL_DB_PATH=/caminho/para/vitral.db java -jar target/quarkus-app/quarkus-run.jar
+VITRAL_DATA_DIR=/caminho/para/dados java -jar target/quarkus-app/quarkus-run.jar
 ```
 
-A pasta de `VITRAL_DB_PATH` precisa existir. Sem a variável, o banco é criado no diretório atual.
+A pasta é criada se não existir. Sem a variável, os dados ficam em `data/` no diretório atual.
 
 ### Rodando com Docker Compose
 
@@ -201,7 +216,7 @@ A pasta de `VITRAL_DB_PATH` precisa existir. Sem a variável, o banco é criado 
 docker compose up -d --build
 ```
 
-O banco fica no volume `vitral-data`.
+O banco e as fotos ficam no volume `vitral-data`.
 
 ## Contribuindo
 

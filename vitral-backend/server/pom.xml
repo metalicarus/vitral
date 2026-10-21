@@ -21,6 +21,7 @@
         <quarkus.platform.version>3.33.4</quarkus.platform.version>
 
         <sqlite-jdbc.version>3.53.4.0</sqlite-jdbc.version>
+        <metadata-extractor.version>2.21.0</metadata-extractor.version>
 
         <compiler-plugin.version>3.15.0</compiler-plugin.version>
         <surefire-plugin.version>3.5.4</surefire-plugin.version>
@@ -80,6 +81,14 @@
             <!-- Provides Hibernate's SQLiteDialect; version managed by the Quarkus BOM -->
             <groupId>org.hibernate.orm</groupId>
             <artifactId>hibernate-community-dialects</artifactId>
+        </dependency>
+
+        <!-- Media -->
+        <dependency>
+            <!-- Reads EXIF, XMP and container metadata from JPEG, PNG, HEIF and WebP (pure Java) -->
+            <groupId>com.drewnoakes</groupId>
+            <artifactId>metadata-extractor</artifactId>
+            <version>${metadata-extractor.version}</version>
         </dependency>
 
         <!-- Security -->

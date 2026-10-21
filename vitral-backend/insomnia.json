@@ -295,6 +295,55 @@
       "metaSortKey": -840,
       "settingEncodeUrl": true,
       "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "fld_assets",
+      "_type": "request_group",
+      "parentId": "wrk_vitral",
+      "name": "6. Fotos",
+      "description": "Upload e catálogo de fotos. Cada usuário só vê as próprias fotos.",
+      "environment": {},
+      "metaSortKey": -830
+    },
+    {
+      "_id": "req_asset_upload",
+      "_type": "request",
+      "parentId": "fld_assets",
+      "name": "Enviar foto",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/assets",
+      "body": {
+        "mimeType": "multipart/form-data",
+        "params": [
+          {
+            "name": "file",
+            "type": "file",
+            "fileName": "",
+            "description": "Escolha uma foto JPEG, PNG, HEIC/HEIF ou WebP"
+          },
+          {
+            "name": "fileModifiedAt",
+            "value": "2024-07-14T19:32:10Z",
+            "disabled": true,
+            "description": "Opcional: data de modificação do arquivo, usada quando a foto não tem EXIF"
+          }
+        ]
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "multipart/form-data"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Escolha o arquivo no campo file. Responde 201 com a foto nova, ou 200 com a existente se você já tinha uma foto com o mesmo conteúdo. Erros: 400 missing_file, 400 invalid_file_modified_at, 415 unsupported_media_type e 413 para arquivos acima do limite. Para usar fileModifiedAt, ative o campo.",
+      "metaSortKey": -829,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
     }
   ]
 }
