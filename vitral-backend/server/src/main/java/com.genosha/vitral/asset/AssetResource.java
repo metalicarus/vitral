@@ -49,6 +49,17 @@ public class AssetResource {
         return Response.created(URI.create("/api/v1/assets/" + view.id())).entity(view).build();
     }
 
+    /**
+     * Tells a backup client which of its files the server does not have yet, so it only
+     * uploads those. Accepts up to 1000 hashes per request.
+     */
+    @POST
+    @Path("/check")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public HashCheckResult check(HashCheckRequest request) {
+        return assets.check(currentUser.get().userId(), request == null ? null : request.hashes());
+    }
+
     /** Accepts ISO-8601 with an offset, such as {@code 2024-07-14T19:32:10Z} or {@code 2024-07-14T16:32:10-03:00}. */
     private static Instant parseInstant(String value) {
         if (value == null || value.isBlank()) {

@@ -82,6 +82,24 @@ flowchart LR
 
 Arquivos de pastas monitoradas são catalogados no lugar: o Vitral só lê, nunca move nem apaga. Assim a sincronização com o celular continua funcionando normalmente.
 
+### A impressão digital dos arquivos
+
+O Vitral reconhece cada arquivo pelo seu SHA-256, um código de 64 caracteres calculado a partir do conteúdo. Ele funciona como uma impressão digital: depende só dos bytes do arquivo, e não do nome, da pasta ou da data. Por isso, o mesmo arquivo gera o mesmo código em qualquer lugar, seja no celular, no computador ou no servidor.
+
+```bash
+$ sha256sum IMG_1234.HEIC
+9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08  IMG_1234.HEIC
+```
+
+Isso permite duas coisas:
+
+- **Sem duplicatas:** ao receber um arquivo, o servidor calcula o código e, se o usuário já tem uma foto com o mesmo código, devolve a existente em vez de guardar uma cópia. Reenviar fotos, ou repetir um backup interrompido, nunca duplica nada.
+- **Backup sem retransmitir:** um cliente calcula os códigos dos próprios arquivos, sem enviá-los, e pergunta ao `POST /api/v1/assets/check` quais o servidor ainda não tem. Num celular com 5.000 fotos em que 4.990 já foram salvas, só 10 arquivos trafegam.
+
+O cliente nunca precisa receber os códigos do servidor: cada lado calcula os seus, e eles coincidem porque o conteúdo é o mesmo. O servidor também não confia no código informado pelo cliente; no upload, ele sempre recalcula a partir do que recebeu.
+
+A contrapartida é que qualquer mudança nos bytes gera outro código. Uma foto editada, recortada ou convertida (por exemplo, de HEIC para JPEG ao ser exportada do celular) é um arquivo diferente para o Vitral, mesmo parecendo a mesma imagem. Reconhecer fotos *parecidas* é outro problema, previsto no roadmap como detecção de duplicatas e fotos parecidas.
+
 ## Stack
 
 | Camada | Tecnologia |
@@ -105,7 +123,7 @@ Arquivos de pastas monitoradas são catalogados no lugar: o Vitral só lê, nunc
 ```
 vitral-backend/
 ├── server/                    # Servidor Quarkus (Maven)
-│   └── src/main/java/dev/vitral/
+│   └── src/main/java/com/genosha/vitral/
 │       ├── common/            # Erros da API
 │       ├── config/            # Configurações (prefixo vitral.)
 │       ├── system/            # Informações públicas do servidor
@@ -154,6 +172,8 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 - [ ] Duplicatas, memórias e edição básica não destrutiva
 - [ ] Live Photos, RAW, armazenamento S3 e login via OIDC
 - [ ] Exportação e importação do banco de dados pela API, restrita a administradores
+- [ ] Pasta de dados padrão em `/var/lib/vitral` ao rodar fora do modo de desenvolvimento (o modo de desenvolvimento continua com `data/`)
+- [ ] `VITRAL_LIBRARY_DIR` opcional, para guardar as fotos em outro disco, separadas do banco
 
 ## Requisitos para rodar (planejado)
 
@@ -190,6 +210,12 @@ curl -X POST http://localhost:8080/api/v1/assets \
   -H 'Authorization: Bearer SEU_TOKEN' \
   -F 'file=@IMG_1234.HEIC' \
   -F 'fileModifiedAt=2024-07-14T19:32:10Z'
+
+# Pergunta quais fotos o servidor ainda não tem, antes de enviar
+curl -X POST http://localhost:8080/api/v1/assets/check \
+  -H 'Authorization: Bearer SEU_TOKEN' \
+  -H 'Content-Type: application/json' \
+  -d '{"hashes":["'"$(sha256sum IMG_1234.HEIC | cut -d' ' -f1)"'"]}'
 ```
 
 ### Configuração

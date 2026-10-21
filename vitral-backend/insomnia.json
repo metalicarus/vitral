@@ -344,6 +344,33 @@
       "metaSortKey": -829,
       "settingEncodeUrl": true,
       "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_asset_check",
+      "_type": "request",
+      "parentId": "fld_assets",
+      "name": "Verificar fotos existentes",
+      "method": "POST",
+      "url": "{{ _.base_url }}/api/v1/assets/check",
+      "body": {
+        "mimeType": "application/json",
+        "text": "{\n  \"hashes\": [\n    \"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\n    \"0000000000000000000000000000000000000000000000000000000000000000\"\n  ]\n}"
+      },
+      "headers": [
+        {
+          "name": "Content-Type",
+          "value": "application/json"
+        }
+      ],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Recebe até 1.000 hashes SHA-256 e responde quais você já tem no servidor (existing, com o id da foto) e quais faltam (missing). Os hashes voltam em minúsculas e sem repetição. Para testar com uma foto enviada, copie o sha256 da resposta de Enviar foto. Erros: 400 missing_hashes, 400 invalid_hash e 400 too_many_hashes.",
+      "metaSortKey": -828,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
     }
   ]
 }

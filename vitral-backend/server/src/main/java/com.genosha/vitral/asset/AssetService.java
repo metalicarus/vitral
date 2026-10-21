@@ -17,6 +17,12 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashSet;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -82,6 +88,58 @@ public class AssetService {
                 throw e;
             }
         });
+    }
+
+    /** Largest number of hashes accepted in one check, to keep each request cheap. */
+    public static final int MAX_HASHES_PER_CHECK = 1000;
+
+    /**
+     * Tells a backup client which files it still needs to send. Only the user's own assets
+     * count: a photo another user has is still missing for this one.
+     */
+    public HashCheckResult check(UUID ownerId, List<String> hashes) {
+        if (hashes == null) {
+            throw ApiException.badRequest("missing_hashes", "Send the hashes in the field \"hashes\".");
+        }
+        if (hashes.size() > MAX_HASHES_PER_CHECK) {
+            throw ApiException.badRequest("too_many_hashes",
+                    "Send at most " + MAX_HASHES_PER_CHECK + " hashes per request.");
+        }
+        Set<String> requested = new LinkedHashSet<>();
+        for (String hash : hashes) {
+            String normalized = Sha256.normalize(hash);
+            if (normalized == null) {
+                throw ApiException.badRequest("invalid_hash",
+                        "Not a SHA-256 hash in hex (64 characters): " + abbreviate(hash));
+            }
+            requested.add(normalized);
+        }
+        if (requested.isEmpty()) {
+            return new HashCheckResult(List.of(), List.of());
+        }
+
+        Map<String, UUID> found = new HashMap<>();
+        for (Asset asset : Asset.<Asset>list("ownerId = ?1 and sha256 in ?2", ownerId, List.copyOf(requested))) {
+            found.put(asset.sha256, asset.id);
+        }
+        List<HashCheckResult.Existing> existing = new ArrayList<>();
+        List<String> missing = new ArrayList<>();
+        for (String hash : requested) {
+            UUID id = found.get(hash);
+            if (id != null) {
+                existing.add(new HashCheckResult.Existing(hash, id));
+            } else {
+                missing.add(hash);
+            }
+        }
+        return new HashCheckResult(existing, missing);
+    }
+
+    private static String abbreviate(String value) {
+        if (value == null) {
+            return "null";
+        }
+        return value.length() <= 80 ? "\"" + value + "\"" : "\"" + value.substring(0, 80) + "...\"";
     }
 
     private static long sizeOf(Path file) {

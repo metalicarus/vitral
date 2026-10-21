@@ -8,6 +8,7 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
+import java.util.Locale;
 
 /** SHA-256 of files, as 64 lowercase hex characters. */
 public final class Sha256 {
@@ -34,6 +35,15 @@ public final class Sha256 {
 
     public static boolean isValidHex(String value) {
         return value != null && value.matches("[0-9a-f]{64}");
+    }
+
+    /** The hash in the stored form (trimmed, lowercase), or null if it is not a SHA-256 in hex. */
+    public static String normalize(String value) {
+        if (value == null) {
+            return null;
+        }
+        String normalized = value.strip().toLowerCase(Locale.ROOT);
+        return isValidHex(normalized) ? normalized : null;
     }
 
     private static MessageDigest newDigest() {

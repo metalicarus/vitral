@@ -6,17 +6,13 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import org.junit.jupiter.api.Test;
 
-import javax.imageio.ImageIO;
-import java.awt.image.BufferedImage;
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.util.HexFormat;
 
+import static com.genosha.vitral.support.TestPhotos.fixture;
+import static com.genosha.vitral.support.TestPhotos.png;
+import static com.genosha.vitral.support.TestPhotos.sha256;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -39,7 +35,7 @@ class AssetUploadTest {
     VitralConfig config;
 
     @Test
-    void storesAPhotoInTheFolderOfItsExifDate() throws Exception {
+    void storesAPhotoInTheFolderOfItsExifDate() throws IOException {
         String token = testUsers.tokenFor("exif@example.com");
         byte[] jpeg = fixture("exif-sample.jpg");
 
@@ -66,7 +62,7 @@ class AssetUploadTest {
     }
 
     @Test
-    void sameContentTwiceReturnsTheExistingPhoto() throws Exception {
+    void sameContentTwiceReturnsTheExistingPhoto() {
         String token = testUsers.tokenFor("duplicate@example.com");
         byte[] jpeg = fixture("exif-sample.jpg");
 
@@ -87,7 +83,7 @@ class AssetUploadTest {
     }
 
     @Test
-    void duplicatesAreDetectedPerUser() throws Exception {
+    void duplicatesAreDetectedPerUser() {
         byte[] jpeg = fixture("exif-sample.jpg");
         String first = given().auth().oauth2(testUsers.tokenFor("ana@example.com"))
                 .multiPart("file", "shared.jpg", jpeg, "image/jpeg")
@@ -161,7 +157,7 @@ class AssetUploadTest {
     }
 
     @Test
-    void rejectsAnInvalidFileDate() throws Exception {
+    void rejectsAnInvalidFileDate() {
         given().auth().oauth2(testUsers.tokenFor("baddate@example.com"))
                 .multiPart("file", "photo.jpg", fixture("exif-sample.jpg"), "image/jpeg")
                 .multiPart("fileModifiedAt", "ontem")
@@ -171,7 +167,7 @@ class AssetUploadTest {
     }
 
     @Test
-    void requiresAuthentication() throws Exception {
+    void requiresAuthentication() {
         given().multiPart("file", "photo.jpg", fixture("exif-sample.jpg"), "image/jpeg")
                 .post(UPLOAD)
                 .then().statusCode(401);
@@ -180,34 +176,5 @@ class AssetUploadTest {
     private Path library(String token) {
         String userId = given().auth().oauth2(token).get("/api/v1/users/me").then().extract().path("id");
         return config.dataDir().resolve("library").resolve(userId);
-    }
-
-    static byte[] fixture(String name) throws IOException {
-        try (InputStream in = AssetUploadTest.class.getResourceAsStream("/fixtures/" + name)) {
-            if (in == null) {
-                throw new IOException("Missing test fixture " + name);
-            }
-            return in.readAllBytes();
-        }
-    }
-
-    static byte[] png(int width, int height, int rgb) {
-        BufferedImage image = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
-        for (int x = 0; x < width; x++) {
-            for (int y = 0; y < height; y++) {
-                image.setRGB(x, y, rgb);
-            }
-        }
-        try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            ImageIO.write(image, "png", out);
-            return out.toByteArray();
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        }
-    }
-
-    static String sha256(byte[] bytes) throws Exception {
-        return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     }
 }
