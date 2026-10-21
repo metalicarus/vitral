@@ -216,6 +216,10 @@ curl -X POST http://localhost:8080/api/v1/assets/check \
   -H 'Authorization: Bearer SEU_TOKEN' \
   -H 'Content-Type: application/json' \
   -d '{"hashes":["'"$(sha256sum IMG_1234.HEIC | cut -d' ' -f1)"'"]}'
+
+# Lista as fotos, da mais recente para a mais antiga; para a página seguinte,
+# repita com &cursor=<nextCursor da resposta>
+curl 'http://localhost:8080/api/v1/assets?limit=20' -H 'Authorization: Bearer SEU_TOKEN'
 ```
 
 ### Configuração

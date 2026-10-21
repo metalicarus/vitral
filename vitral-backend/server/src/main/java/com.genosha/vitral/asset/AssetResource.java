@@ -5,9 +5,11 @@ import com.genosha.vitral.user.auth.CurrentUser;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import org.jboss.resteasy.reactive.RestForm;
@@ -28,6 +30,16 @@ public class AssetResource {
 
     @Inject
     CurrentUser currentUser;
+
+    /**
+     * Lists the user's assets, newest first, one page at a time. Query parameters arrive as
+     * strings so that bad values get a clear 400 instead of the 404 JAX-RS gives for
+     * parameters it cannot convert.
+     */
+    @GET
+    public AssetPage list(@QueryParam("limit") String limit, @QueryParam("cursor") String cursor) {
+        return assets.list(currentUser.get().userId(), parseLimit(limit), parseCursor(cursor));
+    }
 
     /**
      * Uploads one photo. Responds 201 for a new photo and 200 with the existing one when
@@ -58,6 +70,34 @@ public class AssetResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public HashCheckResult check(HashCheckRequest request) {
         return assets.check(currentUser.get().userId(), request == null ? null : request.hashes());
+    }
+
+    private static int parseLimit(String value) {
+        if (value == null || value.isBlank()) {
+            return AssetService.DEFAULT_PAGE_SIZE;
+        }
+        try {
+            int limit = Integer.parseInt(value.strip());
+            if (limit >= 1 && limit <= AssetService.MAX_PAGE_SIZE) {
+                return limit;
+            }
+        } catch (NumberFormatException ignored) {
+            // Falls through to the error below.
+        }
+        throw ApiException.badRequest("invalid_limit",
+                "limit must be a whole number from 1 to " + AssetService.MAX_PAGE_SIZE + ".");
+    }
+
+    private static AssetCursor parseCursor(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return AssetCursor.decode(value);
+        } catch (IllegalArgumentException e) {
+            throw ApiException.badRequest("invalid_cursor",
+                    "Use the nextCursor value from the previous page, unchanged.");
+        }
     }
 
     /** Accepts ISO-8601 with an offset, such as {@code 2024-07-14T19:32:10Z} or {@code 2024-07-14T16:32:10-03:00}. */

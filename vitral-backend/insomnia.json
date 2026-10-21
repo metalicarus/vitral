@@ -371,6 +371,37 @@
       "metaSortKey": -828,
       "settingEncodeUrl": true,
       "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_asset_list",
+      "_type": "request",
+      "parentId": "fld_assets",
+      "name": "Listar fotos",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/assets",
+      "body": {},
+      "headers": [],
+      "parameters": [
+        {
+          "name": "limit",
+          "value": "100",
+          "description": "Fotos por página, de 1 a 500 (padrão 100)"
+        },
+        {
+          "name": "cursor",
+          "value": "",
+          "disabled": true,
+          "description": "Cole o nextCursor da página anterior e ative o parâmetro para ver a próxima"
+        }
+      ],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "Suas fotos, da mais recente para a mais antiga pela data em que foram tiradas. Para a próxima página, copie o nextCursor da resposta para o parâmetro cursor e ative-o; na última página o nextCursor vem null. Erros: 400 invalid_limit e 400 invalid_cursor.",
+      "metaSortKey": -827,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
     }
   ]
 }

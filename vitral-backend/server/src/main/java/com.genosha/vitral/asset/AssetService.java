@@ -8,7 +8,9 @@ import com.genosha.vitral.media.MediaInfo;
 import com.genosha.vitral.media.MediaInspector;
 import com.genosha.vitral.storage.FileName;
 import com.genosha.vitral.storage.LibraryStorage;
+import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 
@@ -88,6 +90,30 @@ public class AssetService {
                 throw e;
             }
         });
+    }
+
+    public static final int DEFAULT_PAGE_SIZE = 100;
+    public static final int MAX_PAGE_SIZE = 500;
+
+    /**
+     * The owner's assets, newest first by capture date, with the id breaking ties between
+     * assets taken in the same millisecond. Pass the previous page's cursor to continue.
+     *
+     * <p>Fetches one extra row to learn whether another page exists, instead of counting.
+     */
+    public AssetPage list(UUID ownerId, int limit, AssetCursor after) {
+        Sort newestFirst = Sort.descending("takenAt", "id");
+        PanacheQuery<Asset> query = after == null
+                ? Asset.find("ownerId = ?1", newestFirst, ownerId)
+                : Asset.find("ownerId = ?1 and (takenAt < ?2 or (takenAt = ?2 and id < ?3))", newestFirst,
+                ownerId, Instant.ofEpochMilli(after.takenAtMillis()), after.id());
+        List<Asset> rows = query.page(0, limit + 1).list();
+
+        boolean hasMore = rows.size() > limit;
+        List<Asset> page = hasMore ? rows.subList(0, limit) : rows;
+        Asset last = page.isEmpty() ? null : page.get(page.size() - 1);
+        String nextCursor = hasMore ? new AssetCursor(last.takenAt.toEpochMilli(), last.id).encode() : null;
+        return new AssetPage(page.stream().map(AssetView::of).toList(), nextCursor);
     }
 
     /** Largest number of hashes accepted in one check, to keep each request cheap. */
