@@ -1,13 +1,16 @@
 package com.genosha.vitral.asset;
 
 import com.genosha.vitral.common.ApiException;
+import com.genosha.vitral.common.ContentDisposition;
 import com.genosha.vitral.user.auth.CurrentUser;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
+import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
@@ -19,6 +22,7 @@ import java.net.URI;
 import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.util.UUID;
 
 @Path("/api/v1/assets")
 @Produces(MediaType.APPLICATION_JSON)
@@ -39,6 +43,58 @@ public class AssetResource {
     @GET
     public AssetPage list(@QueryParam("limit") String limit, @QueryParam("cursor") String cursor) {
         return assets.list(currentUser.get().userId(), parseLimit(limit), parseCursor(cursor));
+    }
+
+    /**
+     * One asset of the user. Responds 404 alike when it does not exist, belongs to someone
+     * else or the id is not even a UUID, so nobody can probe for other people's assets.
+     */
+    @GET
+    @Path("/{id}")
+    public AssetView get(@PathParam("id") String id) {
+        UUID assetId = parseId(id);
+        return assets.find(currentUser.get().userId(), assetId)
+                .map(AssetView::of)
+                .orElseThrow(AssetResource::assetNotFound);
+    }
+
+    /**
+     * Sends the original file, straight from disk. The ETag is the file's SHA-256, so a client
+     * that already has the file gets a 304 without the bytes being sent again. The cache is
+     * private: browsers may keep the photo, proxies along the way may not.
+     */
+    @GET
+    @Path("/{id}/original")
+    @Produces(MediaType.WILDCARD)
+    public Response original(@PathParam("id") String id, @HeaderParam("If-None-Match") String ifNoneMatch) {
+        Asset asset = assets.find(currentUser.get().userId(), parseId(id)).orElseThrow(AssetResource::assetNotFound);
+        String etag = "\"" + asset.sha256 + "\"";
+        Response.ResponseBuilder response = matchesEtag(ifNoneMatch, etag)
+                ? Response.notModified()
+                : Response.ok(assets.originalFile(asset), asset.mimeType)
+                .header("Content-Disposition", ContentDisposition.inline(asset.originalFileName));
+        return response
+                .header("ETag", etag)
+                .header("Cache-Control", "private, max-age=86400")
+                .header("X-Content-Type-Options", "nosniff")
+                .build();
+    }
+
+    /** If-None-Match may list several tags, mark them as weak (W/) or be "*". */
+    static boolean matchesEtag(String ifNoneMatch, String etag) {
+        if (ifNoneMatch == null || ifNoneMatch.isBlank()) {
+            return false;
+        }
+        for (String candidate : ifNoneMatch.split(",")) {
+            String tag = candidate.strip();
+            if (tag.startsWith("W/")) {
+                tag = tag.substring(2);
+            }
+            if (tag.equals("*") || tag.equals(etag)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -70,6 +126,19 @@ public class AssetResource {
     @Consumes(MediaType.APPLICATION_JSON)
     public HashCheckResult check(HashCheckRequest request) {
         return assets.check(currentUser.get().userId(), request == null ? null : request.hashes());
+    }
+
+    /** Taken as a string: a UUID parameter would make JAX-RS answer a bare 404 for malformed ids. */
+    private static UUID parseId(String value) {
+        try {
+            return UUID.fromString(value.strip());
+        } catch (IllegalArgumentException e) {
+            throw assetNotFound();
+        }
+    }
+
+    private static ApiException assetNotFound() {
+        return ApiException.notFound("asset_not_found", "Asset not found.");
     }
 
     private static int parseLimit(String value) {

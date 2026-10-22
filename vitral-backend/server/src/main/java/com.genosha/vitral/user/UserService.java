@@ -1,13 +1,13 @@
 package com.genosha.vitral.user;
 
 import com.genosha.vitral.common.ApiException;
+import com.genosha.vitral.common.Timestamps;
 import com.genosha.vitral.user.auth.PasswordHasher;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
-import java.time.Instant;
 import java.util.List;
 
 @ApplicationScoped
@@ -27,7 +27,7 @@ public class UserService {
         user.displayName = displayName.trim();
         user.passwordHash = passwordHasher.hash(password);
         user.role = role;
-        user.createdAt = Instant.now();
+        user.createdAt = Timestamps.now();
         user.persist();
         return user;
     }

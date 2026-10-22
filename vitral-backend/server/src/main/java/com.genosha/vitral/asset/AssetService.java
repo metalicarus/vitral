@@ -2,6 +2,7 @@ package com.genosha.vitral.asset;
 
 import com.genosha.vitral.common.ApiException;
 import com.genosha.vitral.common.Sha256;
+import com.genosha.vitral.common.Timestamps;
 import com.genosha.vitral.config.ServerTimeZone;
 import com.genosha.vitral.media.CaptureDate;
 import com.genosha.vitral.media.MediaInfo;
@@ -13,6 +14,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -30,6 +32,8 @@ import java.util.UUID;
 
 @ApplicationScoped
 public class AssetService {
+
+    private static final Logger LOG = Logger.getLogger(AssetService.class);
 
     @Inject
     MediaInspector inspector;
@@ -55,9 +59,9 @@ public class AssetService {
                 "unsupported_media_type", "Only JPEG, PNG, HEIC/HEIF and WebP photos are accepted."));
         String sha256 = Sha256.of(uploadedFile);
         long size = sizeOf(uploadedFile);
-        Instant uploadedAt = Instant.now();
+        Instant uploadedAt = Timestamps.now();
         CaptureDate date = CaptureDate.resolve(media.capturedLocal(), media.capturedOffset(),
-                fileModifiedAt, uploadedAt, serverTimeZone.zone());
+                Timestamps.toStoredPrecision(fileModifiedAt), uploadedAt, serverTimeZone.zone());
         String baseName = FileName.baseName(originalFileName).strip();
         String name = baseName.isEmpty() ? "photo." + media.extension() : baseName;
 
@@ -90,6 +94,27 @@ public class AssetService {
                 throw e;
             }
         });
+    }
+
+    /**
+     * One of the owner's assets. Filtering by owner in the same query means another
+     * user's asset is never even loaded.
+     */
+    public Optional<Asset> find(UUID ownerId, UUID id) {
+        return Asset.find("id = ?1 and ownerId = ?2", id, ownerId).firstResultOptional();
+    }
+
+    /**
+     * The asset's original file on disk. If the catalog has the asset but the file is gone
+     * (deleted by hand, a disk problem), says so plainly instead of failing with a 500.
+     */
+    public Path originalFile(Asset asset) {
+        Path file = storage.resolve(asset.relativePath);
+        if (!Files.isRegularFile(file)) {
+            LOG.errorf("The original of asset %s is missing from the library: %s", asset.id, file);
+            throw ApiException.notFound("original_missing", "The original file is missing from the library on disk.");
+        }
+        return file;
     }
 
     public static final int DEFAULT_PAGE_SIZE = 100;

@@ -1,6 +1,7 @@
 package com.genosha.vitral.user.auth;
 
 import com.genosha.vitral.common.ApiException;
+import com.genosha.vitral.common.Timestamps;
 import com.genosha.vitral.config.VitralConfig;
 import com.genosha.vitral.user.User;
 import io.quarkus.panache.common.Sort;
@@ -30,7 +31,7 @@ public class SessionService {
     @Transactional
     public IssuedSession create(User user, String deviceName) {
         String token = SessionTokens.newToken();
-        Instant now = Instant.now();
+        Instant now = Timestamps.now();
         Session session = new Session();
         session.user = user;
         session.tokenHash = SessionTokens.hash(token);
@@ -52,7 +53,7 @@ public class SessionService {
             return Optional.empty();
         }
         Session session = found.get();
-        Instant now = Instant.now();
+        Instant now = Timestamps.now();
         if (!session.expiresAt.isAfter(now)) {
             session.delete();
             return Optional.empty();

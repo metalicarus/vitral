@@ -147,10 +147,11 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 
 **M0 · Fundação**
 - [ ] Repositório, licença, CI e Docker Compose
-- [ ] Esqueleto do servidor Quarkus com SQLite e Flyway
-- [ ] Contas, login e sessões
+- [x] Esqueleto do servidor Quarkus com SQLite e Flyway
+- [x] Contas, login e sessões
 
 **M1 · Ingestão**
+- [x] Catálogo de fotos: upload, verificação de hashes, listagem, consulta e download do original
 - [ ] Upload retomável com checagem de hash
 - [ ] Pastas monitoradas e importação de pastas existentes
 - [ ] Extração de metadados, miniaturas e prévias
@@ -220,6 +221,12 @@ curl -X POST http://localhost:8080/api/v1/assets/check \
 # Lista as fotos, da mais recente para a mais antiga; para a página seguinte,
 # repita com &cursor=<nextCursor da resposta>
 curl 'http://localhost:8080/api/v1/assets?limit=20' -H 'Authorization: Bearer SEU_TOKEN'
+
+# Mostra uma foto pelo id
+curl http://localhost:8080/api/v1/assets/ID_DA_FOTO -H 'Authorization: Bearer SEU_TOKEN'
+
+# Baixa o arquivo original, com o nome com que foi enviado
+curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/original -H 'Authorization: Bearer SEU_TOKEN'
 ```
 
 ### Configuração
