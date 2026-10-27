@@ -65,6 +65,14 @@ public class Asset extends PanacheEntityBase {
     @Column(name = "uploaded_at", nullable = false)
     public Instant uploadedAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "thumbnail_status", nullable = false)
+    public ThumbnailStatus thumbnailStatus;
+
+    /** Why thumbnail generation failed, for the logs and for support. Never exposed by the API. */
+    @Column(name = "thumbnail_error")
+    public String thumbnailError;
+
     public static Optional<Asset> findByOwnerAndHash(UUID ownerId, String sha256) {
         return find("ownerId = ?1 and sha256 = ?2", ownerId, sha256).firstResultOptional();
     }

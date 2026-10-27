@@ -23,6 +23,7 @@ import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.UUID;
+import java.util.function.Function;
 
 @Path("/api/v1/assets")
 @Produces(MediaType.APPLICATION_JSON)
@@ -78,6 +79,55 @@ public class AssetResource {
                 .header("Cache-Control", "private, max-age=86400")
                 .header("X-Content-Type-Options", "nosniff")
                 .build();
+    }
+
+    /**
+     * The asset's thumbnail, a JPEG no larger than 360 px on its longest side, for grids.
+     * Responds 404 thumbnail_pending while it is being generated and thumbnail_failed when
+     * the original could not be processed.
+     */
+    @GET
+    @Path("/{id}/thumbnail")
+    @Produces(MediaType.WILDCARD)
+    public Response thumbnail(@PathParam("id") String id, @HeaderParam("If-None-Match") String ifNoneMatch) {
+        return generated(id, ifNoneMatch, "thumbnail", assets::thumbnailFile);
+    }
+
+    /**
+     * The asset's preview, a JPEG no larger than 1440 px on its longest side, for showing one
+     * photo full screen without downloading the original. Same responses as the thumbnail.
+     */
+    @GET
+    @Path("/{id}/preview")
+    @Produces(MediaType.WILDCARD)
+    public Response preview(@PathParam("id") String id, @HeaderParam("If-None-Match") String ifNoneMatch) {
+        return generated(id, ifNoneMatch, "preview", assets::previewFile);
+    }
+
+    /**
+     * Serves a generated JPEG. Its ETag joins the photo's SHA-256 with the generation
+     * settings' version. Cached for 30 days, since grids ask for these all the time, and
+     * revalidated with the ETag after that.
+     */
+    private Response generated(String id, String ifNoneMatch, String kind, Function<Asset, java.nio.file.Path> file) {
+        Asset asset = assets.find(currentUser.get().userId(), parseId(id)).orElseThrow(AssetResource::assetNotFound);
+        String etag = "\"" + asset.sha256 + "-" + kind + "-v" + ThumbnailService.GENERATION_VERSION + "\"";
+        Response.ResponseBuilder response = matchesEtag(ifNoneMatch, etag)
+                ? Response.notModified()
+                : Response.ok(file.apply(asset), "image/jpeg")
+                .header("Content-Disposition", ContentDisposition.inline(generatedName(asset, kind)));
+        return response
+                .header("ETag", etag)
+                .header("Cache-Control", "private, max-age=2592000")
+                .header("X-Content-Type-Options", "nosniff")
+                .build();
+    }
+
+    /** IMG_1234.HEIC becomes IMG_1234-thumbnail.jpg, the name offered when saving the image. */
+    private static String generatedName(Asset asset, String kind) {
+        String name = asset.originalFileName;
+        int dot = name.lastIndexOf('.');
+        return (dot > 0 ? name.substring(0, dot) : name) + "-" + kind + ".jpg";
     }
 
     /** If-None-Match may list several tags, mark them as weak (W/) or be "*". */

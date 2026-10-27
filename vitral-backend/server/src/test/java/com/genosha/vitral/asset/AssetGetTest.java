@@ -41,6 +41,9 @@ class AssetGetTest {
                 .then().statusCode(200)
                 .extract().jsonPath().getMap("$");
 
+        // Thumbnails are generated in the background, so that one field may have moved on.
+        uploaded.remove("thumbnailStatus");
+        fetched.remove("thumbnailStatus");
         assertEquals(uploaded, fetched);
         assertEquals("2024-07-14T19:32:10.123Z", fetched.get("takenAt"));
     }

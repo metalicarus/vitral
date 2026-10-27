@@ -7,6 +7,7 @@ import com.genosha.vitral.config.ServerTimeZone;
 import com.genosha.vitral.media.CaptureDate;
 import com.genosha.vitral.media.MediaInfo;
 import com.genosha.vitral.media.MediaInspector;
+import com.genosha.vitral.storage.DerivativeStorage;
 import com.genosha.vitral.storage.FileName;
 import com.genosha.vitral.storage.LibraryStorage;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
@@ -44,6 +45,12 @@ public class AssetService {
     @Inject
     ServerTimeZone serverTimeZone;
 
+    @Inject
+    ThumbnailService thumbnails;
+
+    @Inject
+    DerivativeStorage derivatives;
+
     /** The asset and whether this upload created it ({@code false} means the owner already had it). */
     public record UploadResult(Asset asset, boolean created) {
     }
@@ -65,7 +72,7 @@ public class AssetService {
         String baseName = FileName.baseName(originalFileName).strip();
         String name = baseName.isEmpty() ? "photo." + media.extension() : baseName;
 
-        return QuarkusTransaction.requiringNew().call(() -> {
+        UploadResult result = QuarkusTransaction.requiringNew().call(() -> {
             Optional<Asset> existing = Asset.findByOwnerAndHash(ownerId, sha256);
             if (existing.isPresent()) {
                 return new UploadResult(existing.get(), false);
@@ -86,6 +93,7 @@ public class AssetService {
                 asset.takenAt = date.takenAt();
                 asset.takenAtSource = date.source();
                 asset.uploadedAt = uploadedAt;
+                asset.thumbnailStatus = ThumbnailStatus.PENDING;
                 asset.persistAndFlush();
                 return new UploadResult(asset, true);
             } catch (RuntimeException e) {
@@ -94,6 +102,11 @@ public class AssetService {
                 throw e;
             }
         });
+        if (result.created()) {
+            // Only after the commit, so the worker is sure to find the new row.
+            thumbnails.enqueue(result.asset().id);
+        }
+        return result;
     }
 
     /**
@@ -115,6 +128,33 @@ public class AssetService {
             throw ApiException.notFound("original_missing", "The original file is missing from the library on disk.");
         }
         return file;
+    }
+
+    /** The asset's thumbnail on disk, or a 404 saying why there is none yet. */
+    public Path thumbnailFile(Asset asset) {
+        return generatedFile(asset, derivatives.thumbnail(asset.ownerId, asset.id));
+    }
+
+    /** The asset's preview on disk, or a 404 saying why there is none yet. */
+    public Path previewFile(Asset asset) {
+        return generatedFile(asset, derivatives.preview(asset.ownerId, asset.id));
+    }
+
+    private Path generatedFile(Asset asset, Path file) {
+        if (asset.thumbnailStatus == ThumbnailStatus.FAILED) {
+            throw ApiException.notFound("thumbnail_failed",
+                    "The thumbnail and preview could not be generated from this file.");
+        }
+        if (asset.thumbnailStatus == ThumbnailStatus.READY) {
+            if (Files.isRegularFile(file)) {
+                return file;
+            }
+            // Generated files may be deleted at any time; they are simply made again.
+            LOG.warnf("Generated files of asset %s were missing; generating them again", asset.id);
+            thumbnails.requeue(asset.id);
+        }
+        throw ApiException.notFound("thumbnail_pending",
+                "The thumbnail and preview are still being generated; try again shortly.");
     }
 
     public static final int DEFAULT_PAGE_SIZE = 100;

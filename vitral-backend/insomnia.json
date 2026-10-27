@@ -442,6 +442,44 @@
       "metaSortKey": -825,
       "settingEncodeUrl": true,
       "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_asset_thumbnail",
+      "_type": "request",
+      "parentId": "fld_assets",
+      "name": "Ver miniatura",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/assets/{{ _.asset_id }}/thumbnail",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "A miniatura em JPEG da foto em asset_id, com o maior lado de até 360 px, para a grade de fotos. Erros: 404 thumbnail_pending (ainda sendo gerada; tente de novo em instantes), 404 thumbnail_failed (o original não pôde ser processado) e 404 asset_not_found. O campo thumbnailStatus da foto diz em que pé está.",
+      "metaSortKey": -824,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
+    },
+    {
+      "_id": "req_asset_preview",
+      "_type": "request",
+      "parentId": "fld_assets",
+      "name": "Ver prévia",
+      "method": "GET",
+      "url": "{{ _.base_url }}/api/v1/assets/{{ _.asset_id }}/preview",
+      "body": {},
+      "headers": [],
+      "parameters": [],
+      "authentication": {
+        "type": "bearer",
+        "token": "{{ _.token }}"
+      },
+      "description": "A prévia em JPEG da foto em asset_id, com o maior lado de até 1440 px, para mostrar uma foto em tela cheia sem baixar o original. Mesmos erros da miniatura: 404 thumbnail_pending, 404 thumbnail_failed e 404 asset_not_found.",
+      "metaSortKey": -823,
+      "settingEncodeUrl": true,
+      "settingFollowRedirects": "global"
     }
   ]
 }

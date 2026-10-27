@@ -44,6 +44,18 @@ public final class TestPhotos {
         }
     }
 
+    /** Starts like a JPEG, so it is accepted on upload, but holds no image: libvips rejects it. */
+    public static byte[] brokenJpeg() {
+        byte[] garbage = "definitely not image data ".repeat(40).getBytes();
+        byte[] bytes = new byte[4 + garbage.length];
+        bytes[0] = (byte) 0xFF;
+        bytes[1] = (byte) 0xD8;
+        bytes[2] = (byte) 0xFF;
+        bytes[3] = (byte) 0xE0;
+        System.arraycopy(garbage, 0, bytes, 4, garbage.length);
+        return bytes;
+    }
+
     public static String sha256(byte[] bytes) {
         try {
             return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));

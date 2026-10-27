@@ -8,6 +8,10 @@ RUN mvn -B -q package -DskipTests
 
 # Runtime stage: only the JRE and the built application.
 FROM eclipse-temurin:25-jre
+# libvips generates thumbnails and previews; the libde265 plugin lets it read HEIC.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libvips-tools libheif-plugin-libde265 \
+    && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /build/target/quarkus-app/lib/ ./lib/
 COPY --from=build /build/target/quarkus-app/*.jar ./

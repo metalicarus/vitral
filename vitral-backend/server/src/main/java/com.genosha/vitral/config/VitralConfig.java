@@ -28,6 +28,20 @@ public interface VitralConfig {
 
     Upload upload();
 
+    Media media();
+
+    interface Media {
+        /**
+         * Folder with the libvips command-line tools (vipsthumbnail, vipsheader).
+         * Empty means they are found on the PATH.
+         */
+        Optional<Path> vipsDir();
+
+        /** How many photos have their thumbnails generated at the same time. */
+        @WithDefault("2")
+        int workers();
+    }
+
     interface Upload {
         /** Largest file accepted in one request. */
         @WithDefault("4G")

@@ -34,7 +34,7 @@ flowchart TB
         api["API REST<br/>autenticação, linha do tempo, álbuns, busca"]
         upload["Upload retomável<br/>protocolo tus + checagem de hash"]
         watcher["Pastas monitoradas<br/>WatchService + varredura periódica"]
-        jobs["Tarefas em segundo plano<br/>JobRunr"]
+        jobs["Tarefas em segundo plano<br/>fila própria, status no banco"]
     end
 
     pasta[("Pasta sincronizada<br/>somente leitura para o Vitral")]
@@ -74,7 +74,7 @@ flowchart LR
     hash -->|sim| dup["Ignora a duplicata"]
     hash -->|não| grava["Upload: grava em ano/mês<br/>Pasta: cataloga no lugar"]
     grava --> meta["Extrai metadados<br/>EXIF, XMP, GPS"]
-    meta --> thumb["Gera miniatura e prévia<br/>WebP"]
+    meta --> thumb["Gera miniatura e prévia<br/>JPEG, em segundo plano"]
     meta --> video["Vídeo: miniatura e<br/>versão H.264 se preciso"]
     thumb --> pronto["Aparece na<br/>linha do tempo"]
     video --> pronto
@@ -110,7 +110,7 @@ A contrapartida é que qualquer mudança nos bytes gera outro código. Uma foto 
 | Persistência | Hibernate ORM com Panache e migrações com Flyway |
 | Banco de dados | SQLite em arquivo único, modo WAL |
 | Senhas | Argon2id (Bouncy Castle), no formato PHC |
-| Tarefas em segundo plano | JobRunr, com a fila guardada no próprio SQLite |
+| Tarefas em segundo plano | Fila própria no servidor, com o status de cada tarefa no SQLite (ADR 0003) |
 | Metadados | metadata-extractor, com ExifTool para casos difíceis |
 | Imagens | libvips (com libheif para HEIC), chamado como processo externo |
 | Vídeo | FFmpeg, chamado como processo externo |
@@ -145,6 +145,8 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 
 ## Roadmap
 
+A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que chegam logo depois dela.
+
 **M0 · Fundação**
 - [ ] Repositório, licença, CI e Docker Compose
 - [x] Esqueleto do servidor Quarkus com SQLite e Flyway
@@ -152,17 +154,18 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 
 **M1 · Ingestão**
 - [x] Catálogo de fotos: upload, verificação de hashes, listagem, consulta e download do original
-- [ ] Upload retomável com checagem de hash
-- [ ] Pastas monitoradas e importação de pastas existentes
-- [ ] Extração de metadados, miniaturas e prévias
+- [x] Miniaturas e prévias em JPEG, geradas em segundo plano
 - [ ] Processamento de vídeo
+- [ ] Pastas monitoradas e importação de pastas existentes
+- [ ] Metadados completos: câmera, lente, GPS e cidade
+- [ ] Upload retomável com checagem de hash *(v1.1)*
 
 **M2 · Interface web (fecha a primeira metade)**
 - [ ] Linha do tempo e visualizador
 - [ ] Álbuns, favoritos, arquivo e lixeira
-- [ ] Mapa e busca por metadados
 - [ ] Compartilhamento por usuário e por link
-- [ ] Importação do Google Takeout
+- [ ] Mapa e busca por metadados *(v1.1)*
+- [ ] Importação do Google Takeout *(v1.1)*
 
 **M3 · App mobile (segunda metade)**
 - [ ] Backup automático em segundo plano
@@ -178,20 +181,28 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 
 ## Requisitos para rodar (planejado)
 
-- Java 25, ou Docker se preferir rodar em contêiner
+- Java 25 e libvips, ou Docker se preferir rodar em contêiner (a imagem já traz o libvips)
 - 2 núcleos de CPU e 4 GB de RAM
 - Processador amd64 ou arm64
 
 ## Desenvolvimento
 
-Pré-requisitos: JDK 25 e Maven 3.9 ou mais recente. Não é preciso Docker nem banco instalado.
+Pré-requisitos: JDK 25, Maven 3.9 ou mais recente e libvips com suporte a HEIC, que gera as miniaturas. Não é preciso Docker nem banco instalado.
+
+| Sistema | Instalação do libvips |
+| --- | --- |
+| Ubuntu e Debian | `sudo apt install libvips-tools libheif-plugin-libde265` |
+| Fedora | `sudo dnf install vips-tools`; para HEIC, também o `libheif-freeworld` do RPM Fusion |
+| macOS | `brew install vips` |
+
+Sem o libvips, o servidor funciona normalmente, mas as miniaturas ficam pendentes e os testes que dependem dele são pulados. Depois de instalá-lo, basta reiniciar o servidor: ele gera as miniaturas que ficaram para trás.
 
 ```bash
 cd server
 mvn quarkus:dev
 ```
 
-Os dados ficam em `server/data/`, criada na primeira execução: o banco SQLite (`vitral.db`), a biblioteca de fotos (`library/`) e os uploads em andamento (`tmp/`). As migrações são aplicadas automaticamente. A API fica em `http://localhost:8080` e a documentação interativa em `http://localhost:8080/q/swagger-ui`.
+Os dados ficam em `server/data/`, criada na primeira execução: o banco SQLite (`vitral.db`), a biblioteca de fotos (`library/`), as miniaturas e prévias (`derivatives/`) e os arquivos temporários (`tmp/`). As migrações são aplicadas automaticamente. A API fica em `http://localhost:8080` e a documentação interativa em `http://localhost:8080/q/swagger-ui`.
 
 Para rodar os testes, use `mvn test`; eles usam um banco descartável em `target/`. Para gerar o Maven Wrapper (`./mvnw`), rode `mvn wrapper:wrapper` uma vez.
 
@@ -227,6 +238,12 @@ curl http://localhost:8080/api/v1/assets/ID_DA_FOTO -H 'Authorization: Bearer SE
 
 # Baixa o arquivo original, com o nome com que foi enviado
 curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/original -H 'Authorization: Bearer SEU_TOKEN'
+
+# Baixa a miniatura (responde 404 thumbnail_pending enquanto ela é gerada)
+curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/thumbnail -H 'Authorization: Bearer SEU_TOKEN'
+
+# Baixa a prévia, para ver a foto em tela cheia sem baixar o original
+curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/preview -H 'Authorization: Bearer SEU_TOKEN'
 ```
 
 ### Configuração
@@ -236,6 +253,8 @@ curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/original -H 'Authorizati
 | `VITRAL_DATA_DIR` | `data` | Pasta com o banco, a biblioteca de fotos e os uploads temporários |
 | `VITRAL_TIME_ZONE` | Fuso do sistema | Fuso usado para fotos sem fuso no EXIF e para as pastas de ano e mês |
 | `VITRAL_UPLOAD_MAX_SIZE` | `4G` | Maior arquivo aceito por envio |
+| `VITRAL_MEDIA_VIPS_DIR` | Busca no `PATH` | Pasta com os comandos do libvips (`vipsthumbnail`, `vipsheader`) |
+| `VITRAL_MEDIA_WORKERS` | `2` | Quantas fotos têm as miniaturas geradas ao mesmo tempo |
 
 ### Rodando sem Docker
 
