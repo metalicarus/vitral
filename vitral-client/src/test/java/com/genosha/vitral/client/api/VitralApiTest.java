@@ -1,0 +1,148 @@
+package com.genosha.vitral.client.api;
+
+import com.genosha.vitral.client.api.Models.AssetPage;
+import com.genosha.vitral.client.api.Models.LoginResult;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.UUID;
+
+import static org.junit.jupiter.api.Assertions.assertArrayEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+/** Runs the client against a small fake server that answers like Vitral's. */
+class VitralApiTest {
+
+    private HttpServer server;
+    private VitralApi api;
+    /** Authorization headers received, in order. */
+    private final List<String> authorizations = new ArrayList<>();
+
+    @BeforeEach
+    void startServer() throws IOException {
+        server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.start();
+        api = new VitralApi("127.0.0.1:" + server.getAddress().getPort());
+    }
+
+    @AfterEach
+    void stopServer() {
+        server.stop(0);
+    }
+
+    @Test
+    void normalizesTypedAddresses() {
+        assertEquals("http://localhost:8080", VitralApi.normalizeAddress(" localhost:8080/ "));
+        assertEquals("https://fotos.exemplo.com", VitralApi.normalizeAddress("https://fotos.exemplo.com"));
+        assertThrows(IllegalArgumentException.class, () -> VitralApi.normalizeAddress("  "));
+    }
+
+    @Test
+    void readsServerInfo() throws IOException {
+        respond("/api/v1/server/info", 200, """
+                {"name":"Vitral","version":"0.1.0","setupRequired":true}""");
+
+        assertTrue(api.serverInfo().setupRequired());
+    }
+
+    @Test
+    void loginKeepsTheTokenForLaterCalls() throws IOException {
+        respond("/api/v1/auth/login", 200, """
+                {"token":"abc123","expiresAt":"2027-01-31T12:00:00Z",
+                 "user":{"id":"%s","email":"ana@exemplo.com","displayName":"Ana","role":"ADMIN",
+                         "createdAt":"2026-10-20T12:00:00Z"}}""".formatted(UUID.randomUUID()));
+        respond("/api/v1/assets", 200, """
+                {"items":[],"nextCursor":null}""");
+
+        LoginResult result = api.login("ana@exemplo.com", "senha", "Teste");
+        api.listAssets(10, null);
+
+        assertEquals("Ana", result.user().displayName());
+        assertEquals(List.of("", "Bearer abc123"), authorizations);
+    }
+
+    @Test
+    void readsAPageOfAssetsAndPassesTheCursor() throws IOException {
+        UUID id = UUID.randomUUID();
+        List<String> queries = new ArrayList<>();
+        server.createContext("/api/v1/assets", exchange -> {
+            queries.add(exchange.getRequestURI().getRawQuery());
+            write(exchange, 200, """
+                    {"items":[{"id":"%s","type":"PHOTO","originalFileName":"IMG_1.HEIC","mimeType":"image/heic",
+                               "sizeBytes":123,"sha256":"x","width":4032,"height":3024,
+                               "takenAt":"2024-07-14T19:32:10Z","takenAtSource":"EXIF",
+                               "uploadedAt":"2024-07-15T10:00:00Z","thumbnailStatus":"SOMETHING_NEW"}],
+                     "nextCursor":"djF8MTIzfGFi"}""".formatted(id));
+        });
+
+        AssetPage page = api.listAssets(50, "djF8MTIzfGFi");
+
+        assertEquals(List.of("limit=50&cursor=djF8MTIzfGFi"), queries);
+        assertEquals(id, page.items().getFirst().id());
+        assertEquals("djF8MTIzfGFi", page.nextCursor());
+        // A status this client does not know yet must not break the whole page.
+        assertNull(page.items().getFirst().thumbnailStatus());
+    }
+
+    @Test
+    void turnsErrorBodiesIntoApiExceptions() {
+        respond("/api/v1/auth/login", 401, """
+                {"error":"invalid_credentials","message":"E-mail or password is incorrect."}""");
+
+        ApiException error = assertThrows(ApiException.class, () -> api.login("a@b.c", "x", "Teste"));
+
+        assertEquals("invalid_credentials", error.code());
+        assertTrue(error.isUnauthorized());
+    }
+
+    @Test
+    void errorsWithoutAJsonBodyStillCarryTheStatus() {
+        respond("/api/v1/server/info", 502, "Bad Gateway");
+
+        ApiException error = assertThrows(ApiException.class, () -> api.serverInfo());
+
+        assertEquals("http_502", error.code());
+        assertFalse(error.isUnauthorized());
+    }
+
+    @Test
+    void downloadsThumbnails() throws IOException {
+        UUID id = UUID.randomUUID();
+        byte[] jpeg = {(byte) 0xFF, (byte) 0xD8, 1, 2, 3};
+        server.createContext("/api/v1/assets/" + id + "/thumbnail", exchange -> {
+            exchange.sendResponseHeaders(200, jpeg.length);
+            exchange.getResponseBody().write(jpeg);
+            exchange.close();
+        });
+
+        assertArrayEquals(jpeg, api.thumbnail(id));
+    }
+
+    private void respond(String path, int status, String body) {
+        server.createContext(path, exchange -> {
+            String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+            authorizations.add(authorization == null ? "" : authorization);
+            write(exchange, status, body);
+        });
+    }
+
+    private static void write(HttpExchange exchange, int status, String body) throws IOException {
+        byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+        exchange.getResponseHeaders().add("Content-Type", "application/json");
+        exchange.sendResponseHeaders(status, bytes.length);
+        exchange.getResponseBody().write(bytes);
+        exchange.close();
+    }
+}
