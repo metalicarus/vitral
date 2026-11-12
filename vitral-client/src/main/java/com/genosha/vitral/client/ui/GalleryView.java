@@ -89,6 +89,7 @@ public class GalleryView extends StackPane {
     private int columns;
     private double tileSize = TARGET_TILE_SIZE;
     private ViewerView viewer;
+    private AdminView admin;
     private UploadJob upload;
     private Thread uploadThread;
 
@@ -124,6 +125,9 @@ public class GalleryView extends StackPane {
     /** Stops uploads and image loading, and frees memory. Call it when leaving this view. */
     public void dispose() {
         cancelUpload();
+        if (admin != null) {
+            admin.dispose();
+        }
         thumbnails.close();
         previews.close();
     }
@@ -165,7 +169,7 @@ public class GalleryView extends StackPane {
     }
 
     private boolean canUpload() {
-        return upload == null && viewer == null;
+        return upload == null && viewer == null && admin == null;
     }
 
     private void chooseFiles() {
@@ -280,9 +284,27 @@ public class GalleryView extends StackPane {
         alert.showAndWait();
     }
 
+    private void openAdmin() {
+        if (admin != null || viewer != null) {
+            return;
+        }
+        admin = new AdminView(session, this::closeAdmin, onSessionExpired);
+        getChildren().add(admin);
+    }
+
+    /** @param libraryChanged whether a watched folder was added or removed, which changes the photos shown */
+    private void closeAdmin(boolean libraryChanged) {
+        getChildren().remove(admin);
+        admin.dispose();
+        admin = null;
+        if (libraryChanged) {
+            reload();
+        }
+    }
+
     private void openViewer(Asset asset) {
         int index = indexOf(asset.id());
-        if (index < 0 || viewer != null) {
+        if (index < 0 || viewer != null || admin != null) {
             return;
         }
         viewer = new ViewerView(new ViewerHost(), session.api(), thumbnails, previews, settings, zone, index);
@@ -366,7 +388,15 @@ public class GalleryView extends StackPane {
         uploadButton.getStyleClass().add(Styles.ACCENT);
         uploadButton.setTooltip(new Tooltip("Também dá para arrastar fotos e pastas para esta janela"));
 
-        HBox header = new HBox(12, brand, new Spacer(), uploadButton, user, refresh, logout);
+        HBox header = new HBox(12, brand, new Spacer(), uploadButton, user, refresh);
+        if (session.user().isAdmin()) {
+            Button settings = new Button(null, new FontIcon(Feather.SETTINGS));
+            settings.getStyleClass().addAll(Styles.BUTTON_ICON, Styles.FLAT);
+            settings.setTooltip(new Tooltip("Administração: contas e pastas monitoradas"));
+            settings.setOnAction(event -> openAdmin());
+            header.getChildren().add(settings);
+        }
+        header.getChildren().add(logout);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(10, SIDE_PADDING, 10, SIDE_PADDING));
         header.getStyleClass().add("app-header");

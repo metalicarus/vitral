@@ -2,11 +2,12 @@
 
 Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas no servidor. Ele fala com o servidor só pela API REST, a mesma que o app mobile e a interface web vão usar.
 
-> **Status:** primeira versão. Faz login, mostra a galeria, abre cada foto no visualizador e envia fotos ao servidor.
+> **Status:** primeira versão. Faz login, mostra a galeria, abre cada foto no visualizador, envia fotos ao servidor e, para administradores, gerencia contas e pastas monitoradas.
 
 ## O que já faz
 
 - **Login:** pede o endereço do servidor, o e-mail e a senha. Lembra o endereço e o e-mail para a próxima vez; a senha e o token da sessão nunca são gravados.
+- **Primeiro acesso:** num servidor que ainda não tem contas, a tela de login pede também o nome e a confirmação da senha e cria a conta de administrador. Não é preciso nenhum comando para começar.
 - **Galeria:** mostra as fotos da mais recente para a mais antiga, agrupadas por mês, em quadrados que se ajustam à largura da janela. Mais fotos carregam sozinhas conforme você rola.
 - **Miniaturas:** baixadas em segundo plano por poucas conexões de cada vez, com as mais recentes guardadas em memória. Enquanto o servidor ainda gera a miniatura, aparece um relógio no lugar e o app pergunta de novo sozinho, em intervalos crescentes; se o servidor não conseguiu gerá-la, aparece um alerta.
 - **Envio de fotos:** pelo botão **Enviar fotos** (escolhendo fotos ou uma pasta inteira) ou arrastando fotos e pastas para a janela.
@@ -17,6 +18,9 @@ Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas 
 - **Visualizador:** um clique numa foto a abre do maior tamanho que a janela permite, sobre um fundo escuro. Ele mostra a prévia de até 1440 px, e não o original, que pode ter dezenas de megabytes; enquanto ela carrega, a miniatura aparece ampliada. As fotos vizinhas já vêm carregadas, então passar de uma para outra é imediato.
   - Teclas: **←** e **→** passam entre as fotos, **I** mostra os detalhes (data e de onde ela veio, dimensões, tamanho, formato e data do envio) e **Esc** fecha.
   - **Baixar original** salva o arquivo original numa pasta escolhida, com o nome com que foi enviado. O app lembra a última pasta usada.
+- **Administração** (só para administradores, pelo ícone de engrenagem no topo da galeria):
+  - **Usuários:** lista as contas e cria contas novas, de membro ou de administrador.
+  - **Pastas monitoradas:** cadastra uma pasta do servidor para uma conta, como a pasta que o Syncthing mantém sincronizada com o celular. A lista mostra quantas fotos cada pasta tem e quando foi a última varredura, e se atualiza sozinha enquanto está aberta. Dá para pedir uma varredura na hora ou parar de monitorar; o Vitral nunca altera nem apaga os arquivos da pasta.
 - **Tema claro e escuro:** acompanha o tema do sistema operacional, inclusive se ele mudar com o app aberto. O visualizador é sempre escuro.
 
 ## Stack
@@ -57,5 +61,4 @@ A galeria é uma `ListView` de linhas (o título de um mês ou uma fileira de fo
 
 ## Próximos passos
 
-- Setup inicial pelo próprio client, quando o servidor ainda não tem administrador
 - Pacote instalável com `jlink`/`jpackage`, sem exigir JDK na máquina

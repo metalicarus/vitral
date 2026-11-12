@@ -11,7 +11,7 @@
 | Pasta | O que é | Tecnologia | Status |
 | --- | --- | --- | --- |
 | [`vitral-backend/`](vitral-backend/) | Servidor: armazena, cataloga e processa as fotos e expõe a API | Java 25, Quarkus | Fundação (M0) em andamento |
-| [`vitral-client/`](vitral-client/) | Aplicativo desktop para navegar pelas fotos do servidor | Java 25, JavaFX, AtlantaFX | Primeira versão: login, galeria, visualizador e envio de fotos |
+| [`vitral-client/`](vitral-client/) | Aplicativo desktop para navegar pelas fotos do servidor | Java 25, JavaFX, AtlantaFX | Primeira versão: galeria, visualizador, envio de fotos e administração |
 | `vitral-frontend/` | Interface web para navegar, organizar e compartilhar as fotos | SvelteKit | Planejado |
 
 Mais adiante, um app mobile vai cuidar do backup automático do celular, usando a mesma API do servidor. Até lá, o backup pode ser feito com ferramentas de sincronização como o Syncthing, apontando para uma pasta que o servidor monitora.
@@ -34,7 +34,7 @@ mvn quarkus:dev
 
 A API sobe em `http://localhost:8080`, com documentação interativa em `/q/swagger-ui`. O [README do servidor](vitral-backend/README.md) tem a arquitetura, a stack, o roadmap e os primeiros passos com a API, e a pasta `vitral-backend/` traz uma coleção pronta para o Insomnia em `insomnia.json`.
 
-Depois de criar o administrador (veja os primeiros passos no README do servidor), abra o client desktop em outro terminal:
+Depois, abra o client desktop em outro terminal. Num servidor novo, a própria tela de login cria a conta de administrador:
 
 ```bash
 cd vitral-client

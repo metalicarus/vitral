@@ -226,6 +226,92 @@ class VitralApiTest {
         assertFalse(api.upload(photo, null).created());
     }
 
+    @Test
+    void setupCreatesTheAdministratorAndKeepsItsToken() throws IOException {
+        List<String> bodies = new ArrayList<>();
+        server.createContext("/api/v1/setup", exchange -> {
+            bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            write(exchange, 201, """
+                    {"token":"novo-admin","expiresAt":"2027-02-01T12:00:00Z",
+                     "user":{"id":"%s","email":"ana@exemplo.com","displayName":"Ana","role":"ADMIN"}}"""
+                    .formatted(UUID.randomUUID()));
+        });
+        respond("/api/v1/admin/users", 200, "[]");
+
+        Models.LoginResult result = api.setup("ana@exemplo.com", "Ana", "senha-forte-123");
+        api.listUsers();
+
+        assertTrue(result.user().isAdmin());
+        assertTrue(bodies.getFirst().contains("\"displayName\":\"Ana\""));
+        assertEquals(List.of("Bearer novo-admin"), authorizations);
+    }
+
+    @Test
+    void listsAndCreatesUsers() throws IOException {
+        List<String> received = new ArrayList<>();
+        server.createContext("/api/v1/admin/users", exchange -> {
+            received.add(exchange.getRequestMethod() + " "
+                    + new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            if (exchange.getRequestMethod().equals("POST")) {
+                write(exchange, 201, """
+                        {"id":"%s","email":"bia@exemplo.com","displayName":"Bia","role":"USER",
+                         "createdAt":"2026-11-12T10:00:00Z"}""".formatted(UUID.randomUUID()));
+            } else {
+                write(exchange, 200, """
+                        [{"id":"%s","email":"ana@exemplo.com","displayName":"Ana","role":"ADMIN",
+                          "createdAt":"2026-10-20T12:00:00Z"}]""".formatted(UUID.randomUUID()));
+            }
+        });
+
+        List<Models.User> users = api.listUsers();
+        Models.User created = api.createUser("bia@exemplo.com", "Bia", "senha-da-bia", false);
+
+        assertEquals("Ana", users.getFirst().displayName());
+        assertEquals(Instant.parse("2026-10-20T12:00:00Z"), users.getFirst().createdAt());
+        assertFalse(created.isAdmin());
+        assertTrue(received.get(1).startsWith("POST "));
+        assertTrue(received.get(1).contains("\"admin\":false"));
+    }
+
+    @Test
+    void managesWatchedFolders() throws IOException {
+        UUID id = UUID.randomUUID();
+        List<String> calls = new ArrayList<>();
+        server.createContext("/api/v1/admin/folders", exchange -> {
+            String method = exchange.getRequestMethod();
+            String path = exchange.getRequestURI().getPath();
+            calls.add(method + " " + path);
+            String folder = """
+                    {"id":"%s","path":"/fotos/maria","ownerEmail":"maria@exemplo.com",
+                     "createdAt":"2026-11-12T10:00:00Z","lastScanAt":null,"lastScanError":null,"photos":0}"""
+                    .formatted(id);
+            switch (method + " " + path.replace(id.toString(), "ID")) {
+                case "GET /api/v1/admin/folders" -> write(exchange, 200, "[" + folder + "]");
+                case "POST /api/v1/admin/folders" -> write(exchange, 201, folder);
+                case "POST /api/v1/admin/folders/ID/scan" -> {
+                    exchange.sendResponseHeaders(202, -1);
+                    exchange.close();
+                }
+                case "DELETE /api/v1/admin/folders/ID" -> {
+                    exchange.sendResponseHeaders(204, -1);
+                    exchange.close();
+                }
+                default -> write(exchange, 404, "{\"error\":\"folder_not_found\",\"message\":\"Not found.\"}");
+            }
+        });
+
+        Models.Folder added = api.addFolder("/fotos/maria", "maria@exemplo.com");
+        List<Models.Folder> folders = api.listFolders();
+        api.scanFolder(id);
+        api.removeFolder(id);
+
+        assertEquals(id, added.id());
+        assertEquals("/fotos/maria", folders.getFirst().path());
+        assertEquals(null, folders.getFirst().lastScanAt());
+        assertEquals(List.of("POST /api/v1/admin/folders", "GET /api/v1/admin/folders",
+                "POST /api/v1/admin/folders/" + id + "/scan", "DELETE /api/v1/admin/folders/" + id), calls);
+    }
+
     private static String assetJson(UUID id) {
         return """
                 {"id":"%s","type":"PHOTO","originalFileName":"IMG.jpg","mimeType":"image/jpeg","sizeBytes":10,

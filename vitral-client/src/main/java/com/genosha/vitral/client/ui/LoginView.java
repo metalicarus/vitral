@@ -5,6 +5,7 @@ import atlantafx.base.controls.Message;
 import atlantafx.base.controls.PasswordTextField;
 import atlantafx.base.theme.Styles;
 import com.genosha.vitral.client.ClientSettings;
+import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.LoginResult;
 import com.genosha.vitral.client.api.VitralApi;
 import javafx.geometry.Insets;
@@ -21,7 +22,11 @@ import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.util.function.Consumer;
 
-/** Asks for the server address, e-mail and password, and logs in. */
+/**
+ * Asks for the server address, e-mail and password, and logs in. When the server has no
+ * account yet, the same form creates its first one, an administrator, asking also for a
+ * name and for the password again.
+ */
 public class LoginView extends StackPane {
 
     private static final double CARD_WIDTH = 380;
@@ -32,8 +37,13 @@ public class LoginView extends StackPane {
     private final TextField server = new TextField();
     private final TextField email = new TextField();
     private final PasswordTextField password = new PasswordTextField();
+    private final TextField displayName = new TextField();
+    private final PasswordTextField confirmation = new PasswordTextField();
+    private final VBox setupFields;
     private final Button submit = new Button("Entrar");
     private final VBox messages = new VBox();
+    /** Whether the form creates the first administrator instead of logging in. */
+    private boolean setupMode;
 
     /** @param notice shown above the form, for example why the user was sent back here; may be null */
     public LoginView(ClientSettings settings, String notice, Consumer<Session> onLogin) {
@@ -52,6 +62,16 @@ public class LoginView extends StackPane {
         email.setPromptText("voce@exemplo.com");
         password.setPromptText("Senha");
         password.setRight(revealToggle());
+        displayName.setPromptText("Como seu nome aparece no Vitral");
+        confirmation.setPromptText("A mesma senha de novo");
+        setupFields = new VBox(12, field("Seu nome", displayName), field("Confirme a senha", confirmation));
+        showSetupFields(false);
+        // Another address may be a server that is already set up.
+        server.textProperty().addListener((obs, old, text) -> {
+            if (setupMode) {
+                leaveSetupMode();
+            }
+        });
 
         submit.getStyleClass().add(Styles.ACCENT);
         submit.setDefaultButton(true);
@@ -62,6 +82,7 @@ public class LoginView extends StackPane {
                 field("Servidor", server),
                 field("E-mail", email),
                 field("Senha", password),
+                setupFields,
                 messages,
                 submit);
 
@@ -88,6 +109,10 @@ public class LoginView extends StackPane {
     }
 
     private void login() {
+        if (setupMode) {
+            createAdministrator();
+            return;
+        }
         String address = server.getText();
         String emailValue = email.getText().strip();
         String passwordValue = password.getPassword();
@@ -106,8 +131,7 @@ public class LoginView extends StackPane {
         }, attempt -> {
             setBusy(false);
             if (attempt.result() == null) {
-                showError("Este servidor ainda não tem administrador. Crie-o primeiro pelo setup do servidor"
-                        + " (POST /api/v1/setup).");
+                enterSetupMode();
                 return;
             }
             settings.remember(attempt.api().baseUri().toString(), emailValue);
@@ -116,6 +140,65 @@ public class LoginView extends StackPane {
             setBusy(false);
             showError(ErrorMessages.describe(error));
             password.requestFocus();
+        });
+    }
+
+    /** Turns the form into the first-run setup, keeping what was already typed. */
+    private void enterSetupMode() {
+        setupMode = true;
+        showSetupFields(true);
+        submit.setText("Criar administrador e entrar");
+        showMessage(new Message("Servidor novo",
+                "Este servidor ainda não tem contas. Crie a conta de administrador; com ela você cria"
+                        + " depois as contas da família.", new FontIcon(Feather.INFO)), Styles.ACCENT);
+        (displayName.getText().isBlank() ? displayName : confirmation).requestFocus();
+    }
+
+    private void leaveSetupMode() {
+        setupMode = false;
+        showSetupFields(false);
+        submit.setText("Entrar");
+        messages.getChildren().clear();
+    }
+
+    private void showSetupFields(boolean shown) {
+        setupFields.setVisible(shown);
+        setupFields.setManaged(shown);
+    }
+
+    private void createAdministrator() {
+        String address = server.getText();
+        String emailValue = email.getText().strip();
+        String nameValue = displayName.getText().strip();
+        String passwordValue = password.getPassword();
+        if (emailValue.isEmpty() || nameValue.isEmpty()) {
+            showError("Preencha o e-mail e o seu nome.");
+            return;
+        }
+        if (passwordValue.length() < 8) {
+            showError("A senha precisa ter pelo menos 8 caracteres.");
+            return;
+        }
+        if (!passwordValue.equals(confirmation.getPassword())) {
+            showError("As duas senhas não são iguais.");
+            confirmation.requestFocus();
+            return;
+        }
+        setBusy(true);
+        Background.run(() -> {
+            VitralApi api = new VitralApi(address);
+            return new Attempt(api, api.setup(emailValue, nameValue, passwordValue));
+        }, attempt -> {
+            setBusy(false);
+            settings.remember(attempt.api().baseUri().toString(), emailValue);
+            onLogin.accept(new Session(attempt.api(), attempt.result().user()));
+        }, error -> {
+            setBusy(false);
+            if (error instanceof ApiException api && "setup_done".equals(api.code())) {
+                // Someone else set the server up in the meantime: back to a normal login.
+                leaveSetupMode();
+            }
+            showError(ErrorMessages.describe(error));
         });
     }
 
@@ -134,16 +217,17 @@ public class LoginView extends StackPane {
         server.setDisable(busy);
         email.setDisable(busy);
         password.setDisable(busy);
+        setupFields.setDisable(busy);
         submit.setDisable(busy);
         if (busy) {
             ProgressIndicator spinner = new ProgressIndicator();
             spinner.setPrefSize(16, 16);
             submit.setGraphic(spinner);
-            submit.setText("Entrando…");
+            submit.setText(setupMode ? "Criando…" : "Entrando…");
             messages.getChildren().clear();
         } else {
             submit.setGraphic(null);
-            submit.setText("Entrar");
+            submit.setText(setupMode ? "Criar administrador e entrar" : "Entrar");
         }
     }
 
