@@ -12,7 +12,10 @@ import java.time.ZoneOffset;
  * @param height         display height in pixels, or null if unknown
  * @param capturedLocal  capture date and time as written by the camera, usually local time; null if absent
  * @param capturedOffset the UTC offset the camera recorded with it, if any
+ * @param camera         camera, lens and exposure; never null, but its fields may all be
+ * @param location       where the photo was taken, or null when it has no GPS position
  */
 public record MediaInfo(AssetType type, String mimeType, String extension, Integer width, Integer height,
-                        LocalDateTime capturedLocal, ZoneOffset capturedOffset) {
+                        LocalDateTime capturedLocal, ZoneOffset capturedOffset, CameraSettings camera,
+                        Coordinates location) {
 }

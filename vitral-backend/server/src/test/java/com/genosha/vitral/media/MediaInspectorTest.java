@@ -38,6 +38,25 @@ class MediaInspectorTest {
     }
 
     @Test
+    void readsCameraLensExposureAndGpsPosition() throws IOException {
+        MediaInfo info = inspector.inspect(fixture("exif-camera.jpg")).orElseThrow();
+
+        assertEquals(new CameraSettings("Canon", "Canon EOS R6", "RF24-105mm F4 L IS USM", 4.0, 0.004, 400, 50.0),
+                info.camera());
+        // Parque Ibirapuera, São Paulo: south and west, so both negative.
+        assertEquals(-23.5874, info.location().latitude(), 0.0001);
+        assertEquals(-46.6576, info.location().longitude(), 0.0001);
+    }
+
+    @Test
+    void photosWithoutCameraDataOrPositionLeaveThemEmpty() throws IOException {
+        MediaInfo info = inspector.inspect(fixture("exif-sample.jpg")).orElseThrow();
+
+        assertEquals(new CameraSettings(null, null, null, null, null, null, null), info.camera());
+        assertNull(info.location());
+    }
+
+    @Test
     void swapsDimensionsOfPhotosTakenSideways() throws IOException {
         MediaInfo info = inspector.inspect(fixture("exif-rotated.jpg")).orElseThrow();
 

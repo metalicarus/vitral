@@ -78,7 +78,7 @@ class GalleryRowTest {
         for (int i = 0; i < count; i++) {
             Instant date = Instant.parse(takenAt).minusSeconds(i);
             assets.add(new Asset(UUID.randomUUID(), "PHOTO", "IMG_" + i + ".jpg", "image/jpeg", 1000,
-                    4000, 3000, date, TakenAtSource.EXIF, date, ThumbnailStatus.READY));
+                    4000, 3000, date, TakenAtSource.EXIF, date, ThumbnailStatus.READY, null, null));
         }
         return assets;
     }

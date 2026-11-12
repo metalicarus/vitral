@@ -16,7 +16,9 @@ Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas 
   - Junto com cada foto vai a data de modificação do arquivo, que o servidor usa como data da foto quando ela não tem EXIF.
   - Uma barra no rodapé mostra o andamento e permite cancelar. No fim, ela resume o que foi enviado, o que o servidor já tinha e o que falhou, com o motivo de cada falha em **Ver problemas**.
 - **Visualizador:** um clique numa foto a abre do maior tamanho que a janela permite, sobre um fundo escuro. Ele mostra a prévia de até 1440 px, e não o original, que pode ter dezenas de megabytes; enquanto ela carrega, a miniatura aparece ampliada. As fotos vizinhas já vêm carregadas, então passar de uma para outra é imediato.
-  - Teclas: **←** e **→** passam entre as fotos, **I** mostra os detalhes (data e de onde ela veio, dimensões, tamanho, formato e data do envio) e **Esc** fecha.
+  - Teclas: **←** e **→** passam entre as fotos, **I** mostra os detalhes e **Esc** fecha.
+  - Os detalhes trazem a data (e de onde ela veio), a câmera, a lente, a exposição (como `f/4 · 1/250 s · ISO 400 · 50 mm`), o local onde a foto foi tirada, as dimensões, o tamanho, o formato e a data do envio. Câmera e local só aparecem quando a foto tem essas informações.
+  - **Ver no mapa** abre a posição da foto no OpenStreetMap, no navegador. É o único momento em que o app leva algo para fora do servidor, e só quando você clica.
   - **Baixar original** salva o arquivo original numa pasta escolhida, com o nome com que foi enviado. O app lembra a última pasta usada.
 - **Administração** (só para administradores, pelo ícone de engrenagem no topo da galeria):
   - **Usuários:** lista as contas e cria contas novas, de membro ou de administrador.
