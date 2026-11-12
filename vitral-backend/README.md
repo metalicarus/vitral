@@ -148,7 +148,8 @@ O código do servidor é organizado por funcionalidade, não por camada técnica
 A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que chegam logo depois dela.
 
 **M0 · Fundação**
-- [ ] Repositório, licença, CI e Docker Compose
+- [x] Repositório, CI e Docker Compose
+- [ ] Licença (AGPL-3.0 proposta)
 - [x] Esqueleto do servidor Quarkus com SQLite e Flyway
 - [x] Contas, login e sessões
 

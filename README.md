@@ -1,5 +1,7 @@
 # Vitral
 
+[![CI](https://github.com/metalicarus/vitral/actions/workflows/ci.yml/badge.svg)](https://github.com/metalicarus/vitral/actions/workflows/ci.yml)
+
 **Suas fotos, no seu servidor.** O Vitral é um gerenciador de fotos e vídeos self-hosted e totalmente open source: uma alternativa ao Google Fotos que roda em um servidor seu, sem entregar sua biblioteca a terceiros.
 
 > **Status:** em desenvolvimento inicial. Ainda não há versão utilizável.
@@ -40,6 +42,18 @@ mvn javafx:run
 ```
 
 O [README do client](vitral-client/README.md) explica o que ele já faz.
+
+## Integração contínua
+
+A cada push na `main` e a cada pull request, o GitHub Actions faz três verificações em paralelo, e o resultado aparece no próprio PR, antes do merge:
+
+- **Servidor:** roda os testes, com o libvips instalado para os testes de miniatura não serem pulados.
+- **Imagem Docker:** constrói a imagem do servidor, sem publicá-la, para garantir que o `docker compose up` continua funcionando.
+- **Client desktop:** roda os testes do client.
+
+O workflow fica em [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+
+O [Dependabot](.github/dependabot.yml) abre, toda semana, pull requests com as versões novas das dependências, e cada um passa pelo CI. As bibliotecas Java e as imagens Docker recebem só versões de correção, porque o projeto segue linhas LTS (Java 25, Quarkus 3.33, JavaFX 25); a troca de linha é uma decisão feita à mão. As actions do CI recebem qualquer versão.
 
 ## Decisões de arquitetura
 
