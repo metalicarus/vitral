@@ -1,5 +1,6 @@
-# Build stage: compiles the Quarkus server with Maven.
-FROM maven:3.9-eclipse-temurin-26 AS build
+# Build stage: compiles the Quarkus server with Maven. Same Java line as the runtime
+# stage below (25, LTS); move both together when changing it.
+FROM maven:3.9-eclipse-temurin-25 AS build
 WORKDIR /build
 COPY server/pom.xml .
 RUN mvn -B -q dependency:go-offline
