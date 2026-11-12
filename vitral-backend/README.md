@@ -130,7 +130,7 @@ vitral-backend/
 │       ├── user/              # Usuários e administração
 │       │   └── auth/          # Login, sessões e setup inicial
 │       ├── asset/             # Itens: fotos, vídeos e o upload
-│       ├── ingest/            # (M1) Upload tus, pastas monitoradas, importação
+│       ├── ingest/            # Pastas monitoradas (depois: upload retomável e Google Takeout)
 │       ├── media/             # Formatos, metadados e, no M1, miniaturas e vídeo
 │       ├── storage/           # A biblioteca em disco
 │       ├── timeline/          # (M2) Linha do tempo e busca
@@ -157,7 +157,7 @@ A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que
 - [x] Catálogo de fotos: upload, verificação de hashes, listagem, consulta e download do original
 - [x] Miniaturas e prévias em JPEG, geradas em segundo plano
 - [ ] Processamento de vídeo
-- [ ] Pastas monitoradas e importação de pastas existentes
+- [x] Pastas monitoradas e importação de pastas existentes
 - [ ] Metadados completos: câmera, lente, GPS e cidade
 - [ ] Upload retomável com checagem de hash *(v1.1)*
 
@@ -247,6 +247,37 @@ curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/thumbnail -H 'Authorizat
 curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/preview -H 'Authorization: Bearer SEU_TOKEN'
 ```
 
+### Pastas monitoradas
+
+Uma pasta monitorada é uma pasta do servidor cujas fotos entram na biblioteca de um usuário sem serem enviadas: por exemplo, a pasta que o Syncthing mantém sincronizada com o celular. O Vitral cataloga as fotos onde elas estão e **só lê** a pasta: nunca cria, altera, move nem apaga um arquivo nela, então a sincronização continua funcionando normalmente.
+
+- Fotos novas aparecem poucos segundos depois de chegarem, porque o servidor percebe as mudanças na hora. Além disso, cada pasta é varrida por inteiro a cada 15 minutos e na inicialização, o que cobre o que chegou com o servidor desligado.
+- Uma foto que já está na biblioteca do usuário, por exemplo enviada pelo client, não é duplicada.
+- Uma foto renomeada ou movida dentro da pasta continua sendo a mesma foto na biblioteca.
+- Uma foto apagada da pasta continua no catálogo, sem o original para baixar. Assim, um disco desmontado não esvazia a galeria. A remoção vai chegar junto com a lixeira, no M2.
+- Arquivos e pastas ocultos, como `.stfolder` e os temporários do Syncthing, são ignorados.
+
+As pastas são cadastradas por um administrador:
+
+```bash
+# Monitora uma pasta para a usuária maria@exemplo.com (o caminho é no servidor)
+curl -X POST http://localhost:8080/api/v1/admin/folders \
+  -H 'Authorization: Bearer TOKEN_DO_ADMIN' \
+  -H 'Content-Type: application/json' \
+  -d '{"path":"/fotos/celular-maria","ownerEmail":"maria@exemplo.com"}'
+
+# Lista as pastas, com a última varredura e quantas fotos cada uma tem
+curl http://localhost:8080/api/v1/admin/folders -H 'Authorization: Bearer TOKEN_DO_ADMIN'
+
+# Varre uma pasta agora, sem esperar a próxima varredura periódica
+curl -X POST http://localhost:8080/api/v1/admin/folders/ID_DA_PASTA/scan -H 'Authorization: Bearer TOKEN_DO_ADMIN'
+
+# Deixa de monitorar: as fotos da pasta saem do catálogo, os arquivos ficam onde estão
+curl -X DELETE http://localhost:8080/api/v1/admin/folders/ID_DA_PASTA -H 'Authorization: Bearer TOKEN_DO_ADMIN'
+```
+
+A pasta não pode estar dentro da pasta de dados do Vitral nem conter essa pasta, e duas pastas monitoradas não podem se sobrepor. No Linux, cada subpasta usa um "watch" do inotify. Com dezenas de milhares de subpastas, pode ser preciso aumentar `fs.inotify.max_user_watches`; enquanto isso, as fotos novas continuam aparecendo pela varredura periódica.
+
 ### Configuração
 
 | Variável de ambiente | Padrão | Para que serve |
@@ -256,6 +287,8 @@ curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/preview -H 'Authorizatio
 | `VITRAL_UPLOAD_MAX_SIZE` | `4G` | Maior arquivo aceito por envio |
 | `VITRAL_MEDIA_VIPS_DIR` | Busca no `PATH` | Pasta com os comandos do libvips (`vipsthumbnail`, `vipsheader`) |
 | `VITRAL_MEDIA_WORKERS` | `2` | Quantas fotos têm as miniaturas geradas ao mesmo tempo |
+| `VITRAL_IMPORT_SCAN_INTERVAL` | `PT15M` | De quanto em quanto tempo cada pasta monitorada é varrida por inteiro, além das mudanças percebidas na hora |
+| `VITRAL_IMPORT_SETTLE` | `PT5S` | Quanto tempo um arquivo precisa ficar parado antes de ser catalogado, para não ler fotos ainda sendo gravadas |
 
 ### Rodando sem Docker
 
@@ -273,7 +306,7 @@ A pasta é criada se não existir. Sem a variável, os dados ficam em `data/` no
 docker compose up -d --build
 ```
 
-O banco e as fotos ficam no volume `vitral-data`.
+O banco e as fotos ficam no volume `vitral-data`. Para usar pastas monitoradas no Docker, monte as pastas no contêiner em modo somente leitura (há um exemplo comentado no `docker-compose.yml`) e cadastre o caminho de dentro do contêiner, como `/fotos/celular-maria`.
 
 ## Contribuindo
 

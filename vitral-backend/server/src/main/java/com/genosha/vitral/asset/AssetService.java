@@ -10,6 +10,7 @@ import com.genosha.vitral.media.MediaInspector;
 import com.genosha.vitral.storage.DerivativeStorage;
 import com.genosha.vitral.storage.FileName;
 import com.genosha.vitral.storage.LibraryStorage;
+import com.genosha.vitral.storage.OriginalFiles;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.panache.common.Sort;
@@ -51,6 +52,9 @@ public class AssetService {
     @Inject
     DerivativeStorage derivatives;
 
+    @Inject
+    OriginalFiles originals;
+
     /** The asset and whether this upload created it ({@code false} means the owner already had it). */
     public record UploadResult(Asset asset, boolean created) {
     }
@@ -82,18 +86,10 @@ public class AssetService {
             try {
                 Asset asset = new Asset();
                 asset.ownerId = ownerId;
-                asset.type = media.type();
                 asset.originalFileName = name;
                 asset.relativePath = stored.relativePath();
-                asset.mimeType = media.mimeType();
-                asset.sizeBytes = size;
-                asset.sha256 = sha256;
-                asset.width = media.width();
-                asset.height = media.height();
-                asset.takenAt = date.takenAt();
-                asset.takenAtSource = date.source();
                 asset.uploadedAt = uploadedAt;
-                asset.thumbnailStatus = ThumbnailStatus.PENDING;
+                asset.describe(media, sha256, size, date);
                 asset.persistAndFlush();
                 return new UploadResult(asset, true);
             } catch (RuntimeException e) {
@@ -122,10 +118,11 @@ public class AssetService {
      * (deleted by hand, a disk problem), says so plainly instead of failing with a 500.
      */
     public Path originalFile(Asset asset) {
-        Path file = storage.resolve(asset.relativePath);
+        Path file = originals.resolve(asset.folderId, asset.relativePath);
         if (!Files.isRegularFile(file)) {
-            LOG.errorf("The original of asset %s is missing from the library: %s", asset.id, file);
-            throw ApiException.notFound("original_missing", "The original file is missing from the library on disk.");
+            // Expected for a photo deleted from a watched folder: the catalog keeps it.
+            LOG.warnf("The original of asset %s is missing from disk: %s", asset.id, file);
+            throw ApiException.notFound("original_missing", "The original file is missing from disk.");
         }
         return file;
     }

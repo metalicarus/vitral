@@ -8,6 +8,8 @@ services:
     volumes:
       # Database, photo library and temporary uploads.
       - vitral-data:/data
+      # Watched folders: mount them read-only, then add /fotos/... through /api/v1/admin/folders.
+      # - /caminho/no/servidor/celular-maria:/fotos/celular-maria:ro
     restart: unless-stopped
 
 volumes:

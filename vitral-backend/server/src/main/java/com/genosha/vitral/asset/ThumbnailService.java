@@ -5,7 +5,7 @@ import com.genosha.vitral.media.PixelSize;
 import com.genosha.vitral.media.Vips;
 import com.genosha.vitral.media.VipsException;
 import com.genosha.vitral.storage.DerivativeStorage;
-import com.genosha.vitral.storage.LibraryStorage;
+import com.genosha.vitral.storage.OriginalFiles;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.ShutdownEvent;
 import io.quarkus.runtime.StartupEvent;
@@ -55,7 +55,7 @@ public class ThumbnailService {
     VitralConfig config;
 
     @Inject
-    LibraryStorage library;
+    OriginalFiles originals;
 
     @Inject
     DerivativeStorage derivatives;
@@ -137,7 +137,7 @@ public class ThumbnailService {
         if (asset == null || asset.thumbnailStatus != ThumbnailStatus.PENDING) {
             return;
         }
-        Path original = library.resolve(asset.relativePath);
+        Path original = originals.resolve(asset.folderId, asset.relativePath);
         Path previewTemp = null;
         Path thumbnailTemp = null;
         try {
