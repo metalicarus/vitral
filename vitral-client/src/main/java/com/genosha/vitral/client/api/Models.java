@@ -57,9 +57,28 @@ public final class Models {
         UPLOAD
     }
 
+    /**
+     * @param camera   how the photo was taken, or null when the file says nothing about it
+     * @param location where it was taken, or null when it has no GPS position
+     */
     public record Asset(UUID id, String type, String originalFileName, String mimeType, long sizeBytes,
                         Integer width, Integer height, Instant takenAt, TakenAtSource takenAtSource,
-                        Instant uploadedAt, ThumbnailStatus thumbnailStatus) {
+                        Instant uploadedAt, ThumbnailStatus thumbnailStatus, Camera camera, Location location) {
+    }
+
+    /**
+     * Camera, lens and exposure from the photo's EXIF. Any field may be null.
+     *
+     * @param fNumber         aperture, such as 4.0 for f/4
+     * @param exposureSeconds shutter time, such as 0.004 for 1/250 s
+     * @param focalLength     millimeters
+     */
+    public record Camera(String make, String model, String lens, Double fNumber, Double exposureSeconds,
+                         Integer iso, Double focalLength) {
+    }
+
+    /** Decimal degrees; negative latitudes are south, negative longitudes west. */
+    public record Location(double latitude, double longitude) {
     }
 
     /** {@code GET /api/v1/assets}: one page, newest first. {@code nextCursor} is null on the last page. */

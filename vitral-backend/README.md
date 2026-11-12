@@ -158,7 +158,8 @@ A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que
 - [x] Miniaturas e prévias em JPEG, geradas em segundo plano
 - [ ] Processamento de vídeo
 - [x] Pastas monitoradas e importação de pastas existentes
-- [ ] Metadados completos: câmera, lente, GPS e cidade
+- [x] Metadados: câmera, lente, exposição e posição GPS (fotos antigas são relidas sozinhas)
+- [ ] Cidade a partir da posição GPS, com uma base offline *(v1.1)*
 - [ ] Upload retomável com checagem de hash *(v1.1)*
 
 **M2 · Interface web (fecha a primeira metade)**

@@ -5,6 +5,8 @@ import atlantafx.base.theme.Styles;
 import com.genosha.vitral.client.ClientSettings;
 import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.Asset;
+import com.genosha.vitral.client.api.Models.Camera;
+import com.genosha.vitral.client.api.Models.Location;
 import com.genosha.vitral.client.api.Models.TakenAtSource;
 import com.genosha.vitral.client.api.Models.ThumbnailStatus;
 import com.genosha.vitral.client.api.VitralApi;
@@ -15,6 +17,7 @@ import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Button;
+import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.ToggleButton;
@@ -300,11 +303,35 @@ final class ViewerView extends StackPane {
         heading.getStyleClass().addAll(Styles.TITLE_4, "viewer-title");
         info.getChildren().setAll(heading,
                 infoRow("Nome", asset.originalFileName()),
-                infoRow(dateLabel(asset.takenAtSource()), Formats.dateTime(asset.takenAt(), zone)),
+                infoRow(dateLabel(asset.takenAtSource()), Formats.dateTime(asset.takenAt(), zone)));
+        // Camera and position rows appear only when the photo has them, which screenshots and exports often do not.
+        Camera camera = asset.camera();
+        if (camera != null) {
+            optionalRow("Câmera", Formats.camera(camera.make(), camera.model()));
+            optionalRow("Lente", camera.lens());
+            optionalRow("Exposição",
+                    Formats.exposure(camera.fNumber(), camera.exposureSeconds(), camera.iso(), camera.focalLength()));
+        }
+        Location location = asset.location();
+        if (location != null) {
+            Hyperlink map = new Hyperlink("Ver no mapa");
+            map.getStyleClass().add("viewer-link");
+            map.setOnAction(event -> Links.open(Links.map(location.latitude(), location.longitude())));
+            VBox row = (VBox) infoRow("Local", Formats.coordinates(location.latitude(), location.longitude()));
+            row.getChildren().add(map);
+            info.getChildren().add(row);
+        }
+        info.getChildren().addAll(
                 infoRow("Dimensões", Formats.dimensions(asset.width(), asset.height())),
                 infoRow("Tamanho", Formats.fileSize(asset.sizeBytes())),
                 infoRow("Formato", asset.mimeType()),
                 infoRow("Enviada em", asset.uploadedAt() == null ? null : Formats.dateTime(asset.uploadedAt(), zone)));
+    }
+
+    private void optionalRow(String label, String value) {
+        if (value != null) {
+            info.getChildren().add(infoRow(label, value));
+        }
     }
 
     /** Tells where the date came from, since a file or upload date may not be when the photo was taken. */

@@ -1,6 +1,8 @@
 package com.genosha.vitral.asset;
 
+import com.genosha.vitral.media.CameraSettings;
 import com.genosha.vitral.media.CaptureDate;
+import com.genosha.vitral.media.Coordinates;
 import com.genosha.vitral.media.MediaInfo;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Column;
@@ -86,6 +88,45 @@ public class Asset extends PanacheEntityBase {
     @Column(name = "thumbnail_error")
     public String thumbnailError;
 
+    @Column(name = "camera_make")
+    public String cameraMake;
+
+    @Column(name = "camera_model")
+    public String cameraModel;
+
+    @Column(name = "lens_model")
+    public String lensModel;
+
+    /** Aperture, such as 4.0 for f/4. */
+    @Column(name = "f_number")
+    public Double fNumber;
+
+    /** Shutter time in seconds, such as 0.004 for 1/250 s. */
+    @Column(name = "exposure_seconds")
+    public Double exposureSeconds;
+
+    public Integer iso;
+
+    /** Millimeters. */
+    @Column(name = "focal_length")
+    public Double focalLength;
+
+    /** Decimal degrees, negative to the south; null when the photo has no GPS position. */
+    public Double latitude;
+
+    /** Decimal degrees, negative to the west. */
+    public Double longitude;
+
+    /**
+     * Which version of the metadata reading filled in this row. When the reading learns new
+     * fields, {@link #METADATA_VERSION} goes up and older rows are read again in the background.
+     */
+    @Column(name = "metadata_version", nullable = false)
+    public int metadataVersion;
+
+    /** The current version of the metadata reading; see {@link #metadataVersion}. */
+    public static final int METADATA_VERSION = 1;
+
     public static Optional<Asset> findByOwnerAndHash(UUID ownerId, String sha256) {
         return find("ownerId = ?1 and sha256 = ?2", ownerId, sha256).firstResultOptional();
     }
@@ -105,5 +146,22 @@ public class Asset extends PanacheEntityBase {
         this.takenAtSource = date.source();
         this.thumbnailStatus = ThumbnailStatus.PENDING;
         this.thumbnailError = null;
+        describeCapture(media);
+    }
+
+    /** Fills in the camera, exposure and position, and marks the row as read by the current version. */
+    public void describeCapture(MediaInfo media) {
+        CameraSettings camera = media.camera();
+        this.cameraMake = camera.make();
+        this.cameraModel = camera.model();
+        this.lensModel = camera.lens();
+        this.fNumber = camera.fNumber();
+        this.exposureSeconds = camera.exposureSeconds();
+        this.iso = camera.iso();
+        this.focalLength = camera.focalLength();
+        Coordinates location = media.location();
+        this.latitude = location == null ? null : location.latitude();
+        this.longitude = location == null ? null : location.longitude();
+        this.metadataVersion = METADATA_VERSION;
     }
 }

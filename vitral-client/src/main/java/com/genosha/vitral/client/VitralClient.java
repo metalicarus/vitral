@@ -4,6 +4,7 @@ import atlantafx.base.theme.PrimerDark;
 import atlantafx.base.theme.PrimerLight;
 import com.genosha.vitral.client.ui.Background;
 import com.genosha.vitral.client.ui.GalleryView;
+import com.genosha.vitral.client.ui.Links;
 import com.genosha.vitral.client.ui.LoginView;
 import com.genosha.vitral.client.ui.Session;
 import javafx.application.Application;
@@ -31,6 +32,7 @@ public class VitralClient extends Application {
 
     @Override
     public void start(Stage stage) {
+        Links.setOpener(getHostServices()::showDocument);
         followSystemColorScheme();
         scene = new Scene(new LoginView(settings, null, this::showGallery), WIDTH, HEIGHT);
         scene.getStylesheets().add(Objects.requireNonNull(VitralClient.class.getResource("vitral.css")).toExternalForm());

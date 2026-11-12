@@ -4,11 +4,14 @@ import com.drew.imaging.FileType;
 import com.drew.imaging.FileTypeDetector;
 import com.drew.imaging.ImageMetadataReader;
 import com.drew.imaging.ImageProcessingException;
+import com.drew.lang.GeoLocation;
 import com.drew.metadata.Directory;
 import com.drew.metadata.Metadata;
+import com.drew.metadata.MetadataException;
 import com.drew.metadata.exif.ExifDirectoryBase;
 import com.drew.metadata.exif.ExifIFD0Directory;
 import com.drew.metadata.exif.ExifSubIFDDirectory;
+import com.drew.metadata.exif.GpsDirectory;
 import com.drew.metadata.jpeg.JpegDirectory;
 import com.drew.metadata.png.PngDirectory;
 import com.drew.metadata.webp.WebpDirectory;
@@ -30,8 +33,8 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Identifies photos by their content (never by extension) and reads the few
- * metadata fields the catalog needs: dimensions and capture date.
+ * Identifies photos by their content (never by extension) and reads the metadata fields
+ * the catalog keeps: dimensions, capture date, camera and exposure, and GPS position.
  */
 @Singleton
 public class MediaInspector {
@@ -76,7 +79,69 @@ public class MediaInspector {
         }
         Captured captured = captureDate(metadata);
         return Optional.of(new MediaInfo(AssetType.PHOTO, format.mimeType(), format.extension(),
-                dimensions.width(), dimensions.height(), captured.local(), captured.offset()));
+                dimensions.width(), dimensions.height(), captured.local(), captured.offset(),
+                cameraSettings(metadata), location(metadata)));
+    }
+
+    /** Camera, lens and exposure, from the main EXIF directories. */
+    static CameraSettings cameraSettings(Metadata metadata) {
+        ExifIFD0Directory ifd0 = metadata.getFirstDirectoryOfType(ExifIFD0Directory.class);
+        ExifSubIFDDirectory exif = metadata.getFirstDirectoryOfType(ExifSubIFDDirectory.class);
+        if (ifd0 == null && exif == null) {
+            return CameraSettings.NONE;
+        }
+        return new CameraSettings(
+                text(ifd0, ExifDirectoryBase.TAG_MAKE),
+                text(ifd0, ExifDirectoryBase.TAG_MODEL),
+                text(exif, ExifDirectoryBase.TAG_LENS_MODEL),
+                positiveNumber(exif, ExifDirectoryBase.TAG_FNUMBER),
+                positiveNumber(exif, ExifDirectoryBase.TAG_EXPOSURE_TIME),
+                positiveInteger(exif, ExifDirectoryBase.TAG_ISO_EQUIVALENT),
+                positiveNumber(exif, ExifDirectoryBase.TAG_FOCAL_LENGTH));
+    }
+
+    /**
+     * The GPS position, or null. Phones without a fix sometimes write 0,0, a point in the
+     * ocean off Africa; that is treated as no position.
+     */
+    static Coordinates location(Metadata metadata) {
+        GpsDirectory gps = metadata.getFirstDirectoryOfType(GpsDirectory.class);
+        GeoLocation geo = gps == null ? null : gps.getGeoLocation();
+        if (geo == null || geo.isZero() || Double.isNaN(geo.getLatitude()) || Double.isNaN(geo.getLongitude())
+                || Math.abs(geo.getLatitude()) > 90 || Math.abs(geo.getLongitude()) > 180) {
+            return null;
+        }
+        return new Coordinates(geo.getLatitude(), geo.getLongitude());
+    }
+
+    /** A trimmed text tag, or null when absent or blank. Cameras often pad these with spaces or NULs. */
+    private static String text(Directory directory, int tag) {
+        if (directory == null) {
+            return null;
+        }
+        String value = directory.getString(tag);
+        if (value == null) {
+            return null;
+        }
+        String cleaned = value.replace('\0', ' ').strip();
+        return cleaned.isEmpty() || cleaned.length() > 200 ? null : cleaned;
+    }
+
+    private static Double positiveNumber(Directory directory, int tag) {
+        if (directory == null || !directory.containsTag(tag)) {
+            return null;
+        }
+        try {
+            double value = directory.getDouble(tag);
+            return value > 0 && Double.isFinite(value) ? value : null;
+        } catch (MetadataException e) {
+            return null;
+        }
+    }
+
+    private static Integer positiveInteger(Directory directory, int tag) {
+        Integer value = directory == null ? null : directory.getInteger(tag);
+        return value != null && value > 0 ? value : null;
     }
 
     private static Metadata readMetadata(Path file) {

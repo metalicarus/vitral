@@ -88,7 +88,10 @@ class VitralApiTest {
                     {"items":[{"id":"%s","type":"PHOTO","originalFileName":"IMG_1.HEIC","mimeType":"image/heic",
                                "sizeBytes":123,"sha256":"x","width":4032,"height":3024,
                                "takenAt":"2024-07-14T19:32:10Z","takenAtSource":"EXIF",
-                               "uploadedAt":"2024-07-15T10:00:00Z","thumbnailStatus":"SOMETHING_NEW"}],
+                               "uploadedAt":"2024-07-15T10:00:00Z","thumbnailStatus":"SOMETHING_NEW",
+                               "camera":{"make":"Apple","model":"iPhone 15","lens":null,"fNumber":1.8,
+                                         "exposureSeconds":0.008,"iso":64,"focalLength":6.86},
+                               "location":{"latitude":-22.9519,"longitude":-43.2105}}],
                      "nextCursor":"djF8MTIzfGFi"}""".formatted(id));
         });
 
@@ -99,6 +102,9 @@ class VitralApiTest {
         assertEquals("djF8MTIzfGFi", page.nextCursor());
         // A status this client does not know yet must not break the whole page.
         assertNull(page.items().getFirst().thumbnailStatus());
+        assertEquals("iPhone 15", page.items().getFirst().camera().model());
+        assertEquals(64, page.items().getFirst().camera().iso());
+        assertEquals(-22.9519, page.items().getFirst().location().latitude(), 0.00001);
     }
 
     @Test
