@@ -18,6 +18,9 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.Map;
 import java.util.UUID;
@@ -125,6 +128,46 @@ public final class VitralApi {
      */
     public byte[] thumbnail(UUID assetId) throws IOException {
         return send(get("/api/v1/assets/" + assetId + "/thumbnail")).body();
+    }
+
+    /**
+     * The photo's preview, a JPEG no larger than 1440 px, for showing it full screen. Fails
+     * like {@link #thumbnail} while it is being generated.
+     */
+    public byte[] preview(UUID assetId) throws IOException {
+        return send(get("/api/v1/assets/" + assetId + "/preview")).body();
+    }
+
+    /**
+     * Saves the original file at {@code target}, streaming it to disk so even large files
+     * never sit in memory. The bytes go to a {@code .part} file next to the target first,
+     * so a failed download never leaves a broken file under the final name.
+     */
+    public void downloadOriginal(UUID assetId, Path target) throws IOException {
+        Path partial = target.resolveSibling(target.getFileName() + ".part");
+        HttpResponse<Download> response;
+        try {
+            response = http.send(get("/api/v1/assets/" + assetId + "/original"), info -> info.statusCode() == 200
+                    ? HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofFile(partial),
+                    file -> new Download(file, null))
+                    : HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofByteArray(),
+                    error -> new Download(null, error)));
+        } catch (InterruptedException e) {
+            Files.deleteIfExists(partial);
+            Thread.currentThread().interrupt();
+            throw new InterruptedIOException("Interrupted while downloading asset " + assetId);
+        } catch (IOException e) {
+            Files.deleteIfExists(partial);
+            throw e;
+        }
+        if (response.body().error() != null) {
+            throw toApiException(response.statusCode(), response.body().error());
+        }
+        Files.move(partial, target, StandardCopyOption.REPLACE_EXISTING);
+    }
+
+    /** Either the downloaded file or, when the server refused, its error body. */
+    private record Download(Path file, byte[] error) {
     }
 
     private HttpRequest get(String path) {

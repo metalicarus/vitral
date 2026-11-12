@@ -31,8 +31,19 @@ public final class Models {
         FAILED
     }
 
+    /** Where a photo's date came from, from most to least reliable. Unknown values read as null. */
+    public enum TakenAtSource {
+        /** Written by the camera. */
+        EXIF,
+        /** The file's modification time, sent by the uploading client. */
+        FILE,
+        /** When the server received the file. */
+        UPLOAD
+    }
+
     public record Asset(UUID id, String type, String originalFileName, String mimeType, long sizeBytes,
-                        Integer width, Integer height, Instant takenAt, ThumbnailStatus thumbnailStatus) {
+                        Integer width, Integer height, Instant takenAt, TakenAtSource takenAtSource,
+                        Instant uploadedAt, ThumbnailStatus thumbnailStatus) {
     }
 
     /** {@code GET /api/v1/assets}: one page, newest first. {@code nextCursor} is null on the last page. */

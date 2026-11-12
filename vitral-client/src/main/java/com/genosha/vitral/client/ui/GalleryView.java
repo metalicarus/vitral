@@ -3,6 +3,7 @@ package com.genosha.vitral.client.ui;
 import atlantafx.base.controls.Spacer;
 import atlantafx.base.theme.Styles;
 import atlantafx.base.theme.Tweaks;
+import com.genosha.vitral.client.ClientSettings;
 import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
@@ -25,19 +26,17 @@ import javafx.scene.layout.VBox;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
-import java.time.YearMonth;
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 
 /**
  * The user's photos, newest first, grouped by month. More photos load as the user scrolls
- * toward the end, one page at a time.
+ * toward the end, one page at a time. Clicking a photo opens it in the {@link ViewerView},
+ * laid over the gallery.
  */
-public class GalleryView extends BorderPane {
+public class GalleryView extends StackPane {
 
     private static final int PAGE_SIZE = 200;
     /** Starts loading the next page when the user is this many lines from the end. */
@@ -47,14 +46,16 @@ public class GalleryView extends BorderPane {
     private static final double SIDE_PADDING = 16;
     /** Room left for the vertical scroll bar, so the last column never hides under it. */
     private static final double SCROLLBAR_ALLOWANCE = 14;
-    private static final DateTimeFormatter MONTH =
-            DateTimeFormatter.ofPattern("MMMM 'de' yyyy", Locale.forLanguageTag("pt-BR"));
 
     private final Session session;
+    private final ClientSettings settings;
     private final Runnable onSessionExpired;
-    private final ThumbnailLoader thumbnails;
+    private final ImageLoader thumbnails;
+    /** Few previews stay in memory: at 1440 px each one takes about 6 MB once decoded. */
+    private final ImageLoader previews;
     private final ZoneId zone = ZoneId.systemDefault();
 
+    private final BorderPane layout = new BorderPane();
     private final ListView<GalleryRow> list = new ListView<>();
     private final StackPane content = new StackPane();
     private final ProgressBar loadingMore = new ProgressBar(ProgressBar.INDETERMINATE_PROGRESS);
@@ -66,15 +67,18 @@ public class GalleryView extends BorderPane {
     private int generation;
     private int columns;
     private double tileSize = TARGET_TILE_SIZE;
+    private ViewerView viewer;
 
     /**
      * @param onLogout         called when the user clicks "Sair"
      * @param onSessionExpired called when the server no longer accepts the session
      */
-    public GalleryView(Session session, Runnable onLogout, Runnable onSessionExpired) {
+    public GalleryView(Session session, ClientSettings settings, Runnable onLogout, Runnable onSessionExpired) {
         this.session = session;
+        this.settings = settings;
         this.onSessionExpired = onSessionExpired;
-        this.thumbnails = new ThumbnailLoader(session.api());
+        this.thumbnails = new ImageLoader("thumbnails", session.api()::thumbnail, 4, 500);
+        this.previews = new ImageLoader("previews", session.api()::preview, 2, 12);
 
         list.setCellFactory(view -> new RowCell());
         list.getStyleClass().addAll("gallery", Tweaks.EDGE_TO_EDGE);
@@ -85,16 +89,79 @@ public class GalleryView extends BorderPane {
         loadingMore.getStyleClass().add(Styles.SMALL);
         showLoadingMore(false);
 
-        setTop(header(onLogout));
-        setCenter(content);
-        setBottom(loadingMore);
+        layout.setTop(header(onLogout));
+        layout.setCenter(content);
+        layout.setBottom(loadingMore);
+        getChildren().add(layout);
         getStyleClass().add("gallery-view");
         reload();
     }
 
-    /** Stops loading thumbnails and frees their memory. Call it when leaving this view. */
+    /** Stops loading images and frees their memory. Call it when leaving this view. */
     public void dispose() {
         thumbnails.close();
+        previews.close();
+    }
+
+    private void openViewer(Asset asset) {
+        int index = indexOf(asset.id());
+        if (index < 0 || viewer != null) {
+            return;
+        }
+        viewer = new ViewerView(new ViewerHost(), session.api(), thumbnails, previews, settings, zone, index);
+        getChildren().add(viewer);
+        viewer.open();
+    }
+
+    /** Lets the viewer walk through the loaded photos and ask for more. */
+    private final class ViewerHost implements ViewerView.Host {
+
+        @Override
+        public List<Asset> assets() {
+            return assets;
+        }
+
+        @Override
+        public boolean hasMore() {
+            return nextCursor != null;
+        }
+
+        @Override
+        public void loadMore() {
+            GalleryView.this.loadMore();
+        }
+
+        @Override
+        public void closed(Asset current) {
+            getChildren().remove(viewer);
+            viewer = null;
+            revealRowOf(current.id());
+        }
+
+        @Override
+        public void sessionExpired() {
+            onSessionExpired.run();
+        }
+    }
+
+    /** After the viewer closes, scrolls the gallery to the last photo seen there, unless it is already on screen. */
+    private void revealRowOf(UUID assetId) {
+        int row = rowContaining(list.getItems(), assetId);
+        if (list.lookup(".virtual-flow") instanceof VirtualFlow<?> flow
+                && flow.getFirstVisibleCell() != null && flow.getLastVisibleCell() != null
+                && row > flow.getFirstVisibleCell().getIndex() && row < flow.getLastVisibleCell().getIndex()) {
+            return;
+        }
+        list.scrollTo(Math.max(0, row - 1));
+    }
+
+    private int indexOf(UUID assetId) {
+        for (int i = 0; i < assets.size(); i++) {
+            if (assets.get(i).id().equals(assetId)) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private Node header(Runnable onLogout) {
@@ -287,11 +354,6 @@ public class GalleryView extends BorderPane {
         return box;
     }
 
-    private static String monthTitle(YearMonth month) {
-        String text = MONTH.format(month);
-        return Character.toUpperCase(text.charAt(0)) + text.substring(1);
-    }
-
     /** Draws one line of the gallery, reusing its tiles as the user scrolls. */
     private final class RowCell extends ListCell<GalleryRow> {
 
@@ -314,13 +376,13 @@ public class GalleryView extends BorderPane {
             }
             switch (row) {
                 case GalleryRow.MonthHeader header -> {
-                    monthLabel.setText(monthTitle(header.month()));
+                    monthLabel.setText(Formats.month(header.month()));
                     setGraphic(monthLabel);
                 }
                 case GalleryRow.Photos line -> {
                     List<Asset> rowAssets = line.assets();
                     while (tiles.size() < rowAssets.size()) {
-                        tiles.add(new TileView(thumbnails, zone));
+                        tiles.add(new TileView(thumbnails, zone, GalleryView.this::openViewer));
                     }
                     for (int i = 0; i < rowAssets.size(); i++) {
                         tiles.get(i).show(rowAssets.get(i), tileSize);

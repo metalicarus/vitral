@@ -45,6 +45,7 @@
 
 .tile {
     -fx-background-color: -color-bg-subtle;
+    -fx-cursor: hand;
 }
 
 .tile:hover {
@@ -59,4 +60,67 @@
 .state-icon {
     -fx-icon-size: 48px;
     -fx-icon-color: -color-fg-subtle;
+}
+
+/* The viewer is always dark, whatever the theme: photos look best on a dark background. */
+.viewer {
+    -fx-background-color: #0c0d10;
+}
+
+.viewer-bar {
+    -fx-background-color: #101114;
+}
+
+.viewer .label,
+.viewer-title,
+.viewer-value {
+    -fx-text-fill: #e8eaed;
+}
+
+.viewer .viewer-subtitle {
+    -fx-text-fill: #9aa0a6;
+}
+
+.viewer .viewer-notice {
+    -fx-text-fill: #c4c7cc;
+    -fx-text-alignment: center;
+    -fx-font-size: 1.1em;
+}
+
+.viewer .button,
+.viewer .toggle-button {
+    -fx-text-fill: #e8eaed;
+}
+
+.viewer .button .ikonli-font-icon,
+.viewer .toggle-button .ikonli-font-icon {
+    -fx-icon-color: #e8eaed;
+}
+
+.viewer .toggle-button:selected {
+    -fx-background-color: rgba(255, 255, 255, 0.16);
+}
+
+.viewer-nav {
+    -fx-background-color: rgba(255, 255, 255, 0.10);
+    -fx-pref-width: 44px;
+    -fx-pref-height: 44px;
+}
+
+.viewer-nav:hover {
+    -fx-background-color: rgba(255, 255, 255, 0.22);
+}
+
+.viewer-nav:disabled {
+    -fx-opacity: 0.25;
+}
+
+.viewer-nav .ikonli-font-icon {
+    -fx-icon-size: 22px;
+}
+
+.viewer-info {
+    -fx-background-color: #1a1c20;
+    -fx-border-color: transparent transparent transparent #2c2f34;
+    -fx-border-width: 0 0 0 1px;
 }

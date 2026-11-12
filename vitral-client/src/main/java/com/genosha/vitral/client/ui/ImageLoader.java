@@ -1,6 +1,5 @@
 package com.genosha.vitral.client.ui;
 
-import com.genosha.vitral.client.api.VitralApi;
 import javafx.scene.image.Image;
 
 import java.io.ByteArrayInputStream;
@@ -14,34 +13,42 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 
 /**
- * Downloads and decodes thumbnails in the background and keeps the most recent ones in memory.
+ * Downloads and decodes one kind of generated image (thumbnails, previews) in the background
+ * and keeps the most recent ones in memory.
  *
  * <p>A few workers fetch them, so scrolling quickly does not open dozens of connections at
  * once. A request whose future was cancelled before its turn came (because its tile scrolled
  * off screen) is skipped without touching the network.
  */
-public final class ThumbnailLoader implements AutoCloseable {
+public final class ImageLoader implements AutoCloseable {
 
-    private static final int WORKERS = 4;
-    /** About 400 KB each once decoded, so the cache stays under roughly 200 MB. */
-    private static final int CACHE_SIZE = 500;
-
-    private final VitralApi api;
-    private final ExecutorService workers;
-    private final Map<UUID, Image> cache = new LinkedHashMap<>(CACHE_SIZE, 0.75f, true) {
-        @Override
-        protected boolean removeEldestEntry(Map.Entry<UUID, Image> eldest) {
-            return size() > CACHE_SIZE;
-        }
-    };
-
-    public ThumbnailLoader(VitralApi api) {
-        this.api = api;
-        this.workers = Executors.newFixedThreadPool(WORKERS,
-                Thread.ofPlatform().name("vitral-thumbnails-", 0).daemon().factory());
+    /** Gets an image's bytes from the server, such as {@code VitralApi::thumbnail}. */
+    @FunctionalInterface
+    public interface Fetcher {
+        byte[] fetch(UUID assetId) throws IOException;
     }
 
-    /** The thumbnail if it is already in memory, or null. */
+    private final Fetcher fetcher;
+    private final ExecutorService workers;
+    private final Map<UUID, Image> cache;
+
+    /**
+     * @param name      names the worker threads, for thread dumps
+     * @param cacheSize how many decoded images stay in memory
+     */
+    public ImageLoader(String name, Fetcher fetcher, int workerCount, int cacheSize) {
+        this.fetcher = fetcher;
+        this.workers = Executors.newFixedThreadPool(workerCount,
+                Thread.ofPlatform().name("vitral-" + name + "-", 0).daemon().factory());
+        this.cache = new LinkedHashMap<>(cacheSize, 0.75f, true) {
+            @Override
+            protected boolean removeEldestEntry(Map.Entry<UUID, Image> eldest) {
+                return size() > cacheSize;
+            }
+        };
+    }
+
+    /** The image if it is already in memory, or null. */
     public Image cached(UUID assetId) {
         synchronized (cache) {
             return cache.get(assetId);
@@ -49,7 +56,7 @@ public final class ThumbnailLoader implements AutoCloseable {
     }
 
     /**
-     * Fetches the thumbnail. The future fails with the server's {@code thumbnail_pending} error
+     * Fetches the image. The future fails with the server's {@code thumbnail_pending} error
      * while the server is still generating it. Cancel the future when the image is no longer needed.
      */
     public CompletableFuture<Image> load(UUID assetId) {
@@ -64,7 +71,7 @@ public final class ThumbnailLoader implements AutoCloseable {
                     return;
                 }
                 try {
-                    Image image = decode(api.thumbnail(assetId));
+                    Image image = decode(fetcher.fetch(assetId));
                     synchronized (cache) {
                         cache.put(assetId, image);
                     }
@@ -82,7 +89,7 @@ public final class ThumbnailLoader implements AutoCloseable {
     private static Image decode(byte[] jpeg) throws IOException {
         Image image = new Image(new ByteArrayInputStream(jpeg));
         if (image.isError()) {
-            throw new IOException("Could not decode the thumbnail", image.getException());
+            throw new IOException("Could not decode the image", image.getException());
         }
         return image;
     }

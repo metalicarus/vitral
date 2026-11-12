@@ -7,13 +7,17 @@ import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -128,6 +132,49 @@ class VitralApiTest {
         });
 
         assertArrayEquals(jpeg, api.thumbnail(id));
+    }
+
+    @Test
+    void previewsWhileStillPendingFailWithTheServerCode() {
+        UUID id = UUID.randomUUID();
+        respond("/api/v1/assets/" + id + "/preview", 404, """
+                {"error":"thumbnail_pending","message":"Still being generated."}""");
+
+        ApiException error = assertThrows(ApiException.class, () -> api.preview(id));
+
+        assertEquals("thumbnail_pending", error.code());
+    }
+
+    @Test
+    void savesTheOriginalUnderTheChosenName(@TempDir Path folder) throws IOException {
+        UUID id = UUID.randomUUID();
+        byte[] original = "not really a HEIC, but bytes all the same".getBytes(StandardCharsets.UTF_8);
+        server.createContext("/api/v1/assets/" + id + "/original", exchange -> {
+            exchange.sendResponseHeaders(200, original.length);
+            exchange.getResponseBody().write(original);
+            exchange.close();
+        });
+        Path target = folder.resolve("IMG_1234.HEIC");
+
+        api.downloadOriginal(id, target);
+
+        assertArrayEquals(original, Files.readAllBytes(target));
+        assertFalse(Files.exists(folder.resolve("IMG_1234.HEIC.part")));
+    }
+
+    @Test
+    void aRefusedDownloadLeavesNoFileBehind(@TempDir Path folder) throws IOException {
+        UUID id = UUID.randomUUID();
+        respond("/api/v1/assets/" + id + "/original", 404, """
+                {"error":"original_missing","message":"The original file is missing."}""");
+        Path target = folder.resolve("IMG_1234.HEIC");
+
+        ApiException error = assertThrows(ApiException.class, () -> api.downloadOriginal(id, target));
+
+        assertEquals("original_missing", error.code());
+        try (Stream<Path> files = Files.list(folder)) {
+            assertEquals(List.of(), files.toList());
+        }
     }
 
     private void respond(String path, int status, String body) {
