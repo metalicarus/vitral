@@ -1,5 +1,7 @@
 package com.genosha.vitral.asset;
 
+import com.genosha.vitral.media.CaptureDate;
+import com.genosha.vitral.media.MediaInfo;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -16,7 +18,10 @@ import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
-/** A photo or video in someone's library. The file itself lives in the library folder on disk. */
+/**
+ * A photo or video in someone's library. The file itself lives on disk: in the library
+ * folder when it was uploaded, or where it already was when it came from a watched folder.
+ */
 @Entity
 @Table(name = "assets")
 public class Asset extends PanacheEntityBase {
@@ -38,8 +43,16 @@ public class Asset extends PanacheEntityBase {
     @Column(name = "original_file_name", nullable = false)
     public String originalFileName;
 
-    /** Relative to the library root, with forward slashes. Never exposed by the API. */
-    @Column(name = "relative_path", nullable = false, unique = true)
+    /** The watched folder that holds the original, or null when it was uploaded into the library. */
+    @JdbcTypeCode(SqlTypes.CHAR)
+    @Column(name = "folder_id", length = 36)
+    public UUID folderId;
+
+    /**
+     * Where the original is, with forward slashes: relative to the watched folder when
+     * {@link #folderId} is set, otherwise to the library root. Never exposed by the API.
+     */
+    @Column(name = "relative_path", nullable = false)
     public String relativePath;
 
     @Column(name = "mime_type", nullable = false)
@@ -75,5 +88,22 @@ public class Asset extends PanacheEntityBase {
 
     public static Optional<Asset> findByOwnerAndHash(UUID ownerId, String sha256) {
         return find("ownerId = ?1 and sha256 = ?2", ownerId, sha256).firstResultOptional();
+    }
+
+    /**
+     * Fills in what is known about the file's content, and sends it back to the thumbnail
+     * queue. Used for new assets and when the file of a watched folder changes.
+     */
+    public void describe(MediaInfo media, String sha256, long sizeBytes, CaptureDate date) {
+        this.type = media.type();
+        this.mimeType = media.mimeType();
+        this.sha256 = sha256;
+        this.sizeBytes = sizeBytes;
+        this.width = media.width();
+        this.height = media.height();
+        this.takenAt = date.takenAt();
+        this.takenAtSource = date.source();
+        this.thumbnailStatus = ThumbnailStatus.PENDING;
+        this.thumbnailError = null;
     }
 }

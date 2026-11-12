@@ -2,6 +2,7 @@ package com.genosha.vitral.config;
 
 import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
+import io.smallrye.config.WithName;
 
 import io.quarkus.runtime.configuration.MemorySize;
 
@@ -29,6 +30,24 @@ public interface VitralConfig {
     Upload upload();
 
     Media media();
+
+    /** Watched folders. Named {@code imports} because {@code import} is a Java keyword. */
+    @WithName("import")
+    Import imports();
+
+    interface Import {
+        /** How often every watched folder is scanned in full, on top of the changes seen as they happen. */
+        @WithDefault("PT15M")
+        Duration scanInterval();
+
+        /**
+         * How long a file must stay untouched before it is cataloged, so files still being
+         * written by a sync tool are not read half-way. Changes noticed as they happen are
+         * also scanned this long after the last one.
+         */
+        @WithDefault("PT5S")
+        Duration settle();
+    }
 
     interface Media {
         /**

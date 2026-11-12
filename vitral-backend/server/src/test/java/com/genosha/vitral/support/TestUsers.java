@@ -21,8 +21,18 @@ public class TestUsers {
     /** A fresh token for the user with this e-mail, creating the user on first use. */
     @Transactional
     public String tokenFor(String email) {
+        return tokenFor(email, Role.USER);
+    }
+
+    /** Like {@link #tokenFor(String)}, for an administrator. */
+    @Transactional
+    public String adminTokenFor(String email) {
+        return tokenFor(email, Role.ADMIN);
+    }
+
+    private String tokenFor(String email, Role role) {
         User user = User.findByEmail(email)
-                .orElseGet(() -> users.create(email, "Test user", "senha-de-teste-123", Role.USER));
+                .orElseGet(() -> users.create(email, "Test user", "senha-de-teste-123", role));
         return sessions.create(user, "test").token();
     }
 }

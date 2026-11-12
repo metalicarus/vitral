@@ -59,6 +59,18 @@ public class DerivativeStorage {
         }
     }
 
+    /** Deletes all generated files of an asset that left the catalog. Best effort: leftovers are harmless. */
+    public void deleteQuietly(UUID ownerId, UUID assetId) {
+        Path folder = folder(ownerId, assetId);
+        for (Path file : new Path[]{thumbnail(ownerId, assetId), preview(ownerId, assetId), folder}) {
+            try {
+                Files.deleteIfExists(file);
+            } catch (IOException ignored) {
+                // A folder with something unexpected in it is simply left behind.
+            }
+        }
+    }
+
     private Path folder(UUID ownerId, UUID assetId) {
         String id = assetId.toString();
         return root.resolve(ownerId.toString()).resolve(id.substring(0, 2)).resolve(id);
