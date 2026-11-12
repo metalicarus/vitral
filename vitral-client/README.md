@@ -2,14 +2,17 @@
 
 Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas no servidor. Ele fala com o servidor só pela API REST, a mesma que o app mobile e a interface web vão usar.
 
-> **Status:** primeira versão. Faz login e mostra a galeria; ainda não envia fotos nem abre uma foto em tela cheia.
+> **Status:** primeira versão. Faz login, mostra a galeria e abre cada foto no visualizador; ainda não envia fotos.
 
 ## O que já faz
 
 - **Login:** pede o endereço do servidor, o e-mail e a senha. Lembra o endereço e o e-mail para a próxima vez; a senha e o token da sessão nunca são gravados.
 - **Galeria:** mostra as fotos da mais recente para a mais antiga, agrupadas por mês, em quadrados que se ajustam à largura da janela. Mais fotos carregam sozinhas conforme você rola.
 - **Miniaturas:** baixadas em segundo plano por poucas conexões de cada vez, com as mais recentes guardadas em memória. Enquanto o servidor ainda gera a miniatura, aparece um relógio no lugar; se ele não conseguiu gerá-la, um alerta.
-- **Tema claro e escuro:** acompanha o tema do sistema operacional, inclusive se ele mudar com o app aberto.
+- **Visualizador:** um clique numa foto a abre do maior tamanho que a janela permite, sobre um fundo escuro. Ele mostra a prévia de até 1440 px, e não o original, que pode ter dezenas de megabytes; enquanto ela carrega, a miniatura aparece ampliada. As fotos vizinhas já vêm carregadas, então passar de uma para outra é imediato.
+  - Teclas: **←** e **→** passam entre as fotos, **I** mostra os detalhes (data e de onde ela veio, dimensões, tamanho, formato e data do envio) e **Esc** fecha.
+  - **Baixar original** salva o arquivo original numa pasta escolhida, com o nome com que foi enviado. O app lembra a última pasta usada.
+- **Tema claro e escuro:** acompanha o tema do sistema operacional, inclusive se ele mudar com o app aberto. O visualizador é sempre escuro.
 
 ## Stack
 
@@ -49,7 +52,6 @@ A galeria é uma `ListView` de linhas (o título de um mês ou uma fileira de fo
 
 ## Próximos passos
 
-- Visualizador: abrir uma foto pela prévia, navegar entre fotos e baixar o original
 - Upload de fotos, pulando as que o servidor já tem (`POST /api/v1/assets/check`)
 - Setup inicial pelo próprio client, quando o servidor ainda não tem administrador
 - Pacote instalável com `jlink`/`jpackage`, sem exigir JDK na máquina

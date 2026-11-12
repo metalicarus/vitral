@@ -47,7 +47,7 @@ public class VitralClient extends Application {
     }
 
     private void showGallery(Session session) {
-        gallery = new GalleryView(session,
+        gallery = new GalleryView(session, settings,
                 () -> logout(session),
                 () -> showLogin("Sua sessão expirou. Entre de novo."));
         show(gallery);

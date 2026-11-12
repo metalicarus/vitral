@@ -1,6 +1,7 @@
 package com.genosha.vitral.client.ui;
 
 import com.genosha.vitral.client.api.Models.Asset;
+import com.genosha.vitral.client.api.Models.TakenAtSource;
 import com.genosha.vitral.client.api.Models.ThumbnailStatus;
 import com.genosha.vitral.client.ui.GalleryRow.MonthHeader;
 import com.genosha.vitral.client.ui.GalleryRow.Photos;
@@ -75,8 +76,9 @@ class GalleryRowTest {
     private static List<Asset> assets(String takenAt, int count) {
         List<Asset> assets = new ArrayList<>();
         for (int i = 0; i < count; i++) {
+            Instant date = Instant.parse(takenAt).minusSeconds(i);
             assets.add(new Asset(UUID.randomUUID(), "PHOTO", "IMG_" + i + ".jpg", "image/jpeg", 1000,
-                    4000, 3000, Instant.parse(takenAt).minusSeconds(i), ThumbnailStatus.READY));
+                    4000, 3000, date, TakenAtSource.EXIF, date, ThumbnailStatus.READY));
         }
         return assets;
     }

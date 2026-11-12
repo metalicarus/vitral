@@ -9,6 +9,7 @@ import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.StackPane;
 import javafx.scene.shape.Rectangle;
 import javafx.util.Duration;
@@ -16,11 +17,10 @@ import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.Locale;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
+import java.util.function.Consumer;
 
 /**
  * One square photo of the gallery. The thumbnail is cropped to fill the square, as in most
@@ -29,10 +29,8 @@ import java.util.concurrent.CompletionException;
 final class TileView extends StackPane {
 
     private static final double CORNER_RADIUS = 6;
-    private static final DateTimeFormatter TAKEN_AT =
-            DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy, HH:mm", Locale.forLanguageTag("pt-BR"));
 
-    private final ThumbnailLoader loader;
+    private final ImageLoader loader;
     private final ZoneId zone;
     private final ImageView imageView = new ImageView();
     private final FontIcon placeholder = new FontIcon();
@@ -43,9 +41,15 @@ final class TileView extends StackPane {
     private double size;
     private CompletableFuture<Image> pending;
 
-    TileView(ThumbnailLoader loader, ZoneId zone) {
+    /** @param onOpen called with the photo when the user clicks it */
+    TileView(ImageLoader loader, ZoneId zone, Consumer<Asset> onOpen) {
         this.loader = loader;
         this.zone = zone;
+        setOnMouseClicked(event -> {
+            if (event.getButton() == MouseButton.PRIMARY && asset != null) {
+                onOpen.accept(asset);
+            }
+        });
         imageView.setSmooth(true);
         imageView.setPreserveRatio(false);
         placeholder.getStyleClass().add("tile-placeholder");
@@ -65,7 +69,7 @@ final class TileView extends StackPane {
         }
         cancelPending();
         this.asset = asset;
-        tooltip.setText(asset.originalFileName() + "\n" + TAKEN_AT.format(asset.takenAt().atZone(zone)));
+        tooltip.setText(asset.originalFileName() + "\n" + Formats.dateTime(asset.takenAt(), zone));
         imageView.setImage(null);
         imageView.setOpacity(1);
 
