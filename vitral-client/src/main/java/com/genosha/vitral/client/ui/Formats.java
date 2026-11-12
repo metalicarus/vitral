@@ -51,6 +51,11 @@ final class Formats {
         return width == null || height == null ? null : width + " × " + height;
     }
 
+    /** {@code 1 foto enviada}, {@code 3 fotos enviadas}. */
+    static String count(int count, String singular, String plural) {
+        return count + " " + (count == 1 ? singular : plural);
+    }
+
     private static String capitalize(String text) {
         return text.isEmpty() ? text : Character.toUpperCase(text.charAt(0)) + text.substring(1);
     }

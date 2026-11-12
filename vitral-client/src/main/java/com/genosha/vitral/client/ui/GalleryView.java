@@ -7,34 +7,52 @@ import com.genosha.vitral.client.ClientSettings;
 import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
+import com.genosha.vitral.client.api.Models.HashCheckResult;
+import com.genosha.vitral.client.api.Models.UploadResult;
+import javafx.application.Platform;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ProgressIndicator;
+import javafx.scene.control.TextArea;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.skin.VirtualFlow;
+import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.DirectoryChooser;
+import javafx.stage.FileChooser;
 import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Path;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 
 /**
  * The user's photos, newest first, grouped by month. More photos load as the user scrolls
  * toward the end, one page at a time. Clicking a photo opens it in the {@link ViewerView},
- * laid over the gallery.
+ * laid over the gallery. Photos are added with the "Enviar fotos" button or by dropping
+ * files and folders on the window; an {@link UploadJob} sends them.
  */
 public class GalleryView extends StackPane {
 
@@ -59,6 +77,9 @@ public class GalleryView extends StackPane {
     private final ListView<GalleryRow> list = new ListView<>();
     private final StackPane content = new StackPane();
     private final ProgressBar loadingMore = new ProgressBar(ProgressBar.INDETERMINATE_PROGRESS);
+    private final UploadBar uploadBar = new UploadBar(this::cancelUpload);
+    private final MenuButton uploadButton = new MenuButton("Enviar fotos", new FontIcon(Feather.UPLOAD));
+    private final Node dropHint = dropHint();
 
     private final List<Asset> assets = new ArrayList<>();
     private String nextCursor;
@@ -68,6 +89,8 @@ public class GalleryView extends StackPane {
     private int columns;
     private double tileSize = TARGET_TILE_SIZE;
     private ViewerView viewer;
+    private UploadJob upload;
+    private Thread uploadThread;
 
     /**
      * @param onLogout         called when the user clicks "Sair"
@@ -91,16 +114,170 @@ public class GalleryView extends StackPane {
 
         layout.setTop(header(onLogout));
         layout.setCenter(content);
-        layout.setBottom(loadingMore);
-        getChildren().add(layout);
+        layout.setBottom(new VBox(uploadBar, loadingMore));
+        getChildren().addAll(layout, dropHint);
         getStyleClass().add("gallery-view");
+        acceptDroppedFiles();
         reload();
     }
 
-    /** Stops loading images and frees their memory. Call it when leaving this view. */
+    /** Stops uploads and image loading, and frees memory. Call it when leaving this view. */
     public void dispose() {
+        cancelUpload();
         thumbnails.close();
         previews.close();
+    }
+
+    /** Files and folders dropped anywhere on the gallery are uploaded. */
+    private void acceptDroppedFiles() {
+        setOnDragOver(event -> {
+            if (canUpload() && event.getDragboard().hasFiles()) {
+                event.acceptTransferModes(TransferMode.COPY);
+            }
+            event.consume();
+        });
+        setOnDragEntered(event -> dropHint.setVisible(canUpload() && event.getDragboard().hasFiles()));
+        setOnDragExited(event -> dropHint.setVisible(false));
+        setOnDragDropped(event -> {
+            dropHint.setVisible(false);
+            boolean accepted = canUpload() && event.getDragboard().hasFiles();
+            if (accepted) {
+                startUpload(event.getDragboard().getFiles().stream().map(File::toPath).toList());
+            }
+            event.setDropCompleted(accepted);
+            event.consume();
+        });
+    }
+
+    private Node dropHint() {
+        FontIcon icon = new FontIcon(Feather.UPLOAD_CLOUD);
+        icon.getStyleClass().add("state-icon");
+        Label title = new Label("Solte para enviar ao Vitral");
+        title.getStyleClass().add(Styles.TITLE_3);
+        Label description = new Label("Fotos e pastas; o que o servidor já tem não é enviado de novo.");
+        description.getStyleClass().add(Styles.TEXT_MUTED);
+        VBox box = new VBox(10, icon, title, description);
+        box.setAlignment(Pos.CENTER);
+        box.getStyleClass().add("drop-hint");
+        box.setMouseTransparent(true);
+        box.setVisible(false);
+        return box;
+    }
+
+    private boolean canUpload() {
+        return upload == null && viewer == null;
+    }
+
+    private void chooseFiles() {
+        FileChooser chooser = new FileChooser();
+        chooser.setTitle("Escolher fotos para enviar");
+        chooser.setInitialDirectory(settings.uploadDirectory().toFile());
+        List<String> patterns = new ArrayList<>();
+        for (String extension : UploadJob.PHOTO_EXTENSIONS) {
+            // Some file dialogs match extensions case-sensitively.
+            patterns.add("*." + extension);
+            patterns.add("*." + extension.toUpperCase(Locale.ROOT));
+        }
+        chooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Fotos (JPEG, PNG, HEIC, WebP)", patterns),
+                new FileChooser.ExtensionFilter("Todos os arquivos", "*"));
+        List<File> chosen = chooser.showOpenMultipleDialog(getScene().getWindow());
+        if (chosen != null && !chosen.isEmpty()) {
+            settings.rememberUploadDirectory(chosen.getFirst().toPath().getParent());
+            startUpload(chosen.stream().map(File::toPath).toList());
+        }
+    }
+
+    private void chooseFolder() {
+        DirectoryChooser chooser = new DirectoryChooser();
+        chooser.setTitle("Escolher uma pasta para enviar");
+        chooser.setInitialDirectory(settings.uploadDirectory().toFile());
+        File chosen = chooser.showDialog(getScene().getWindow());
+        if (chosen != null) {
+            Path folder = chosen.toPath();
+            settings.rememberUploadDirectory(folder.getParent() != null ? folder.getParent() : folder);
+            startUpload(List.of(folder));
+        }
+    }
+
+    private void startUpload(List<Path> selection) {
+        if (!canUpload()) {
+            return;
+        }
+        UploadJob.Server server = new UploadJob.Server() {
+            @Override
+            public HashCheckResult check(List<String> hashes) throws IOException {
+                return session.api().check(hashes);
+            }
+
+            @Override
+            public UploadResult upload(Path file, Instant fileModifiedAt) throws IOException {
+                return session.api().upload(file, fileModifiedAt);
+            }
+        };
+        AtomicLong lastReport = new AtomicLong();
+        UploadJob job = new UploadJob(server, selection, (phase, done, total, fileName) -> {
+            // Hashing many small files reports thousands of steps a second; the screen needs a few.
+            long now = System.nanoTime();
+            long last = lastReport.get();
+            if (now - last > 50_000_000L || done == 0) {
+                lastReport.set(now);
+                Platform.runLater(() -> {
+                    if (upload != null) {
+                        uploadBar.showProgress(phase, done, total, fileName);
+                    }
+                });
+            }
+        });
+        upload = job;
+        uploadButton.setDisable(true);
+        uploadBar.showProgress(UploadJob.Phase.COLLECTING, 0, 0, null);
+        uploadThread = Thread.ofVirtual().name("vitral-upload").start(() -> {
+            try {
+                UploadJob.Summary summary = job.run();
+                Platform.runLater(() -> uploadFinished(job, summary));
+            } catch (ApiException expired) {
+                Platform.runLater(onSessionExpired);
+            } catch (RuntimeException e) {
+                Platform.runLater(() -> uploadFinished(job, new UploadJob.Summary(0, 0, 0,
+                        List.of(new UploadJob.Failure(Path.of("—"), ErrorMessages.describe(e))), false)));
+            }
+        });
+    }
+
+    private void cancelUpload() {
+        if (upload != null) {
+            upload.cancel();
+            uploadThread.interrupt();
+        }
+    }
+
+    private void uploadFinished(UploadJob job, UploadJob.Summary summary) {
+        if (upload != job) {
+            return;
+        }
+        upload = null;
+        uploadThread = null;
+        uploadButton.setDisable(false);
+        uploadBar.showSummary(summary, () -> showFailures(summary.failures()));
+        if (summary.uploaded() > 0) {
+            reload();
+        }
+    }
+
+    private void showFailures(List<UploadJob.Failure> failures) {
+        TextArea list = new TextArea(failures.stream()
+                .map(failure -> failure.file().getFileName() + " — " + failure.reason())
+                .collect(Collectors.joining("\n")));
+        list.setEditable(false);
+        list.setWrapText(true);
+        list.setPrefRowCount(Math.min(12, failures.size() + 1));
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.initOwner(getScene().getWindow());
+        alert.setTitle("Fotos não enviadas");
+        alert.setHeaderText(Formats.count(failures.size(), "foto não foi enviada", "fotos não foram enviadas"));
+        alert.getDialogPane().setContent(list);
+        alert.showAndWait();
     }
 
     private void openViewer(Asset asset) {
@@ -181,7 +358,15 @@ public class GalleryView extends StackPane {
         logout.getStyleClass().add(Styles.FLAT);
         logout.setOnAction(event -> onLogout.run());
 
-        HBox header = new HBox(12, brand, new Spacer(), user, refresh, logout);
+        MenuItem files = new MenuItem("Escolher fotos…", new FontIcon(Feather.IMAGE));
+        files.setOnAction(event -> chooseFiles());
+        MenuItem folder = new MenuItem("Escolher uma pasta…", new FontIcon(Feather.FOLDER));
+        folder.setOnAction(event -> chooseFolder());
+        uploadButton.getItems().setAll(files, folder);
+        uploadButton.getStyleClass().add(Styles.ACCENT);
+        uploadButton.setTooltip(new Tooltip("Também dá para arrastar fotos e pastas para esta janela"));
+
+        HBox header = new HBox(12, brand, new Spacer(), uploadButton, user, refresh, logout);
         header.setAlignment(Pos.CENTER_LEFT);
         header.setPadding(new Insets(10, SIDE_PADDING, 10, SIDE_PADDING));
         header.getStyleClass().add("app-header");
@@ -328,7 +513,8 @@ public class GalleryView extends StackPane {
 
     private Node emptyState() {
         return centeredState(Feather.IMAGE, "Nenhuma foto ainda",
-                "As fotos enviadas ao servidor aparecem aqui, da mais recente para a mais antiga.", null);
+                "Use “Enviar fotos” ou arraste fotos e pastas para esta janela. Elas aparecem aqui,"
+                        + " da mais recente para a mais antiga.", null);
     }
 
     private Node errorState(String message) {

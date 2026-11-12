@@ -4,6 +4,7 @@ import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.ThumbnailStatus;
 import javafx.animation.FadeTransition;
+import javafx.animation.PauseTransition;
 import javafx.application.Platform;
 import javafx.geometry.Rectangle2D;
 import javafx.scene.control.Tooltip;
@@ -29,6 +30,8 @@ import java.util.function.Consumer;
 final class TileView extends StackPane {
 
     private static final double CORNER_RADIUS = 6;
+    private static final Duration FIRST_RETRY = Duration.seconds(2);
+    private static final Duration MAX_RETRY = Duration.seconds(30);
 
     private final ImageLoader loader;
     private final ZoneId zone;
@@ -36,6 +39,7 @@ final class TileView extends StackPane {
     private final FontIcon placeholder = new FontIcon();
     private final Tooltip tooltip = new Tooltip();
     private final Rectangle clip = new Rectangle();
+    private final PauseTransition retry = new PauseTransition();
 
     private Asset asset;
     private double size;
@@ -77,18 +81,23 @@ final class TileView extends StackPane {
             showPlaceholder(Feather.ALERT_TRIANGLE);
             return;
         }
-        if (asset.thumbnailStatus() != ThumbnailStatus.READY) {
-            showPlaceholder(Feather.CLOCK);
-            return;
-        }
         Image cached = loader.cached(asset.id());
         if (cached != null) {
             showImage(cached, false);
             return;
         }
-        showPlaceholder(Feather.IMAGE);
-        Asset requested = asset;
-        pending = loader.load(asset.id());
+        // A photo the list called pending may be ready by now, so it is asked for all the same.
+        showPlaceholder(asset.thumbnailStatus() == ThumbnailStatus.READY ? Feather.IMAGE : Feather.CLOCK);
+        load(asset, FIRST_RETRY);
+    }
+
+    /**
+     * Asks for the thumbnail. While the server is still generating it, asks again after
+     * {@code retryDelay}, then after twice as long, up to {@link #MAX_RETRY}; this way photos
+     * just uploaded fill in by themselves. Stops as soon as the tile shows another photo.
+     */
+    private void load(Asset requested, Duration retryDelay) {
+        pending = loader.load(requested.id());
         pending.whenComplete((image, error) -> Platform.runLater(() -> {
             if (this.asset != requested) {
                 return;
@@ -97,6 +106,13 @@ final class TileView extends StackPane {
                 showImage(image, true);
             } else if (unwrap(error) instanceof ApiException api && "thumbnail_pending".equals(api.code())) {
                 showPlaceholder(Feather.CLOCK);
+                retry.setDuration(retryDelay);
+                retry.setOnFinished(event -> {
+                    if (this.asset == requested) {
+                        load(requested, retryDelay.multiply(2).lessThan(MAX_RETRY) ? retryDelay.multiply(2) : MAX_RETRY);
+                    }
+                });
+                retry.playFromStart();
             } else if (!(unwrap(error) instanceof CancellationException)) {
                 showPlaceholder(Feather.ALERT_TRIANGLE);
             }
@@ -137,6 +153,7 @@ final class TileView extends StackPane {
     }
 
     private void cancelPending() {
+        retry.stop();
         if (pending != null) {
             pending.cancel(false);
             pending = null;

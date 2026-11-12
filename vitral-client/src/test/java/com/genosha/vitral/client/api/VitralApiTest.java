@@ -14,6 +14,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -175,6 +176,61 @@ class VitralApiTest {
         try (Stream<Path> files = Files.list(folder)) {
             assertEquals(List.of(), files.toList());
         }
+    }
+
+    @Test
+    void checksHashes() throws IOException {
+        String have = "a".repeat(64);
+        String lack = "b".repeat(64);
+        List<String> bodies = new ArrayList<>();
+        server.createContext("/api/v1/assets/check", exchange -> {
+            bodies.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            write(exchange, 200, """
+                    {"existing":[{"sha256":"%s","id":"%s"}],"missing":["%s"]}""".formatted(have, UUID.randomUUID(), lack));
+        });
+
+        Models.HashCheckResult result = api.check(List.of(have, lack));
+
+        assertEquals("{\"hashes\":[\"" + have + "\",\"" + lack + "\"]}", bodies.getFirst());
+        assertEquals(List.of(lack), result.missing());
+        assertEquals(have, result.existing().getFirst().sha256());
+    }
+
+    @Test
+    void uploadsAsMultipartWithTheFileDate(@TempDir Path folder) throws IOException {
+        Path photo = folder.resolve("Férias \"2024\".jpg");
+        Files.writeString(photo, "jpeg bytes");
+        List<String> received = new ArrayList<>();
+        server.createContext("/api/v1/assets", exchange -> {
+            received.add(exchange.getRequestHeaders().getFirst("Content-Type"));
+            received.add(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
+            write(exchange, 201, assetJson(UUID.randomUUID()));
+        });
+
+        Models.UploadResult result = api.upload(photo, Instant.parse("2024-07-14T19:32:10Z"));
+
+        assertTrue(result.created());
+        assertTrue(received.get(0).startsWith("multipart/form-data; boundary="));
+        String body = received.get(1);
+        assertTrue(body.contains("name=\"file\"; filename=\"Férias %222024%22.jpg\""), body);
+        assertTrue(body.contains("\r\n\r\njpeg bytes\r\n"), body);
+        assertTrue(body.contains("name=\"fileModifiedAt\"\r\n\r\n2024-07-14T19:32:10Z"), body);
+    }
+
+    @Test
+    void anUploadTheServerAlreadyHadIsNotCreated(@TempDir Path folder) throws IOException {
+        Path photo = folder.resolve("IMG.jpg");
+        Files.writeString(photo, "jpeg bytes");
+        server.createContext("/api/v1/assets", exchange -> write(exchange, 200, assetJson(UUID.randomUUID())));
+
+        assertFalse(api.upload(photo, null).created());
+    }
+
+    private static String assetJson(UUID id) {
+        return """
+                {"id":"%s","type":"PHOTO","originalFileName":"IMG.jpg","mimeType":"image/jpeg","sizeBytes":10,
+                 "takenAt":"2024-07-14T19:32:10Z","takenAtSource":"FILE","uploadedAt":"2026-11-11T10:00:00Z",
+                 "thumbnailStatus":"PENDING"}""".formatted(id);
     }
 
     private void respond(String path, int status, String body) {
