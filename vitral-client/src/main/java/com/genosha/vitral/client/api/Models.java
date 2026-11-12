@@ -50,6 +50,20 @@ public final class Models {
     public record AssetPage(List<Asset> items, String nextCursor) {
     }
 
+    /**
+     * {@code POST /api/v1/assets/check}: which of the hashes the user already has on the
+     * server, and which are missing. Both lists keep the order of the request.
+     */
+    public record HashCheckResult(List<Existing> existing, List<String> missing) {
+
+        public record Existing(String sha256, UUID id) {
+        }
+    }
+
+    /** {@code POST /api/v1/assets}: the photo, and whether this upload created it or the user already had it. */
+    public record UploadResult(Asset asset, boolean created) {
+    }
+
     /** The body of every error response. */
     record ErrorBody(String error, String message) {
     }

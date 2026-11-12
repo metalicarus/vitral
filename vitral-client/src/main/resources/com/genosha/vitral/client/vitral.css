@@ -62,6 +62,35 @@
     -fx-icon-color: -color-fg-subtle;
 }
 
+.upload-bar {
+    -fx-background-color: -color-bg-subtle;
+    -fx-border-color: -color-border-muted transparent transparent transparent;
+    -fx-border-width: 1px 0 0 0;
+}
+
+.upload-bar .ikonli-font-icon {
+    -fx-icon-size: 18px;
+}
+
+.upload-bar .ikonli-font-icon.success {
+    -fx-icon-color: -color-success-fg;
+}
+
+.upload-bar .ikonli-font-icon.warning {
+    -fx-icon-color: -color-warning-fg;
+}
+
+/* Shown over the gallery while files are dragged onto it. */
+.drop-hint {
+    -fx-background-color: -color-bg-default;
+    -fx-opacity: 0.94;
+    -fx-border-color: -color-accent-emphasis;
+    -fx-border-width: 3px;
+    -fx-border-style: segments(12, 8);
+    -fx-border-insets: 12px;
+    -fx-border-radius: 12px;
+}
+
 /* The viewer is always dark, whatever the theme: photos look best on a dark background. */
 .viewer {
     -fx-background-color: #0c0d10;

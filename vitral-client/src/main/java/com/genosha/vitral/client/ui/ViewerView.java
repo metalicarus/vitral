@@ -91,6 +91,7 @@ final class ViewerView extends StackPane {
     private final ToggleButton infoToggle = new ToggleButton(null, new FontIcon(Feather.INFO));
     private final VBox info = new VBox(16);
     private final PauseTransition statusTimeout = new PauseTransition(Duration.seconds(6));
+    private final PauseTransition previewRetry = new PauseTransition(Duration.seconds(3));
 
     private int index;
     private CompletableFuture<Image> pending;
@@ -236,11 +237,12 @@ final class ViewerView extends StackPane {
         prefetch(index - 1);
     }
 
+    /**
+     * Loads the preview, even for a photo the list called pending: it may be ready by now.
+     * While the server is still generating it, tries again every few seconds for as long as
+     * the photo stays on screen.
+     */
     private void loadPreview(Asset asset) {
-        if (asset.thumbnailStatus() != ThumbnailStatus.READY) {
-            showNotice("A prévia desta foto ainda está sendo gerada. Tente de novo em instantes.");
-            return;
-        }
         spinner.setVisible(true);
         pending = previews.load(asset.id());
         pending.whenComplete((image, error) -> Platform.runLater(() -> {
@@ -249,6 +251,7 @@ final class ViewerView extends StackPane {
             }
             spinner.setVisible(false);
             if (image != null) {
+                showNotice(null);
                 showImage(image);
                 return;
             }
@@ -259,7 +262,15 @@ final class ViewerView extends StackPane {
             if (cause instanceof ApiException apiError && apiError.isUnauthorized()) {
                 host.sessionExpired();
             } else if (cause instanceof ApiException apiError && "thumbnail_pending".equals(apiError.code())) {
-                showNotice("A prévia desta foto ainda está sendo gerada. Tente de novo em instantes.");
+                if (imageView.getImage() == null) {
+                    showNotice("A prévia desta foto ainda está sendo gerada. Ela aparece aqui assim que ficar pronta.");
+                }
+                previewRetry.setOnFinished(event -> {
+                    if (host.assets().get(index) == asset) {
+                        loadPreview(asset);
+                    }
+                });
+                previewRetry.playFromStart();
             } else {
                 showNotice(ErrorMessages.describe(cause));
             }
@@ -269,7 +280,7 @@ final class ViewerView extends StackPane {
     /** Starts loading a neighbor's preview, so moving to it is instant. */
     private void prefetch(int neighbor) {
         List<Asset> assets = host.assets();
-        if (neighbor >= 0 && neighbor < assets.size() && assets.get(neighbor).thumbnailStatus() == ThumbnailStatus.READY) {
+        if (neighbor >= 0 && neighbor < assets.size() && assets.get(neighbor).thumbnailStatus() != ThumbnailStatus.FAILED) {
             previews.load(assets.get(neighbor).id());
         }
     }
@@ -364,6 +375,7 @@ final class ViewerView extends StackPane {
     }
 
     private void cancelPending() {
+        previewRetry.stop();
         if (pending != null) {
             pending.cancel(false);
             pending = null;

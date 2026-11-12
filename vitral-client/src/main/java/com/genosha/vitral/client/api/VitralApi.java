@@ -5,10 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
 import com.genosha.vitral.client.api.Models.ErrorBody;
+import com.genosha.vitral.client.api.Models.HashCheckResult;
 import com.genosha.vitral.client.api.Models.LoginResult;
 import com.genosha.vitral.client.api.Models.ServerInfo;
+import com.genosha.vitral.client.api.Models.UploadResult;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -22,6 +25,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.time.Duration;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -36,6 +42,7 @@ public final class VitralApi {
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+    private static final Duration UPLOAD_TIMEOUT = Duration.ofHours(2);
 
     private final URI baseUri;
     private final HttpClient http;
@@ -168,6 +175,61 @@ public final class VitralApi {
 
     /** Either the downloaded file or, when the server refused, its error body. */
     private record Download(Path file, byte[] error) {
+    }
+
+    /** Largest number of hashes the server accepts in one {@link #check}. */
+    public static final int MAX_HASHES_PER_CHECK = 1000;
+
+    /**
+     * Asks which of these SHA-256 hashes (64 lowercase hex characters) the user does not have
+     * on the server yet, so only those files need to be sent.
+     */
+    public HashCheckResult check(List<String> hashes) throws IOException {
+        HttpRequest request = request("/api/v1/assets/check")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("hashes", hashes)))
+                .build();
+        return readJson(send(request), HashCheckResult.class);
+    }
+
+    /**
+     * Uploads one photo, streaming it from disk. If the user already has a file with the same
+     * content, the server keeps nothing new and answers with the existing photo.
+     *
+     * @param fileModifiedAt the file's modification time, used as the photo's date when it
+     *                       has no EXIF date; may be null
+     */
+    public UploadResult upload(Path file, Instant fileModifiedAt) throws IOException {
+        String boundary = "vitral-" + UUID.randomUUID();
+        List<HttpRequest.BodyPublisher> parts = new ArrayList<>();
+        parts.add(HttpRequest.BodyPublishers.ofString("--" + boundary + "\r\n"
+                + "Content-Disposition: form-data; name=\"file\"; filename=\""
+                + multipartFileName(file.getFileName().toString()) + "\"\r\n"
+                + "Content-Type: application/octet-stream\r\n\r\n", StandardCharsets.UTF_8));
+        parts.add(HttpRequest.BodyPublishers.ofFile(file));
+        if (fileModifiedAt != null) {
+            parts.add(HttpRequest.BodyPublishers.ofString("\r\n--" + boundary + "\r\n"
+                    + "Content-Disposition: form-data; name=\"fileModifiedAt\"\r\n\r\n"
+                    + fileModifiedAt, StandardCharsets.UTF_8));
+        }
+        parts.add(HttpRequest.BodyPublishers.ofString("\r\n--" + boundary + "--\r\n", StandardCharsets.UTF_8));
+
+        HttpRequest request = request("/api/v1/assets")
+                // Large files take a while to send; the server answers only after receiving everything.
+                .timeout(UPLOAD_TIMEOUT)
+                .header("Content-Type", "multipart/form-data; boundary=" + boundary)
+                .POST(HttpRequest.BodyPublishers.concat(parts.toArray(HttpRequest.BodyPublisher[]::new)))
+                .build();
+        HttpResponse<byte[]> response = send(request);
+        return new UploadResult(readJson(response, Asset.class), response.statusCode() == 201);
+    }
+
+    /**
+     * The file name as browsers write it in a multipart header: UTF-8, with quotes and line
+     * breaks escaped so they cannot end the header early.
+     */
+    static String multipartFileName(String name) {
+        return name.replace("\"", "%22").replace("\r", "%0D").replace("\n", "%0A");
     }
 
     private HttpRequest get(String path) {

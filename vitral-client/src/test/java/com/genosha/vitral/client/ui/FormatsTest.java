@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.time.Instant;
 import java.time.YearMonth;
 import java.time.ZoneId;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -29,6 +30,23 @@ class FormatsTest {
         assertEquals("1,0 KB", Formats.fileSize(1024));
         assertEquals("3,2 MB", Formats.fileSize(3_355_443));
         assertEquals("4,0 GB", Formats.fileSize(4L * 1024 * 1024 * 1024));
+    }
+
+    @Test
+    void countsPickSingularOrPlural() {
+        assertEquals("1 foto enviada", Formats.count(1, "foto enviada", "fotos enviadas"));
+        assertEquals("3 fotos enviadas", Formats.count(3, "foto enviada", "fotos enviadas"));
+        assertEquals("0 fotos enviadas", Formats.count(0, "foto enviada", "fotos enviadas"));
+    }
+
+    @Test
+    void uploadSummariesMentionOnlyWhatHappened() {
+        assertEquals("3 fotos enviadas · 1 já estava no servidor",
+                UploadBar.describe(new UploadJob.Summary(3, 1, 0, List.of(), false)));
+        assertEquals("Envio cancelado. 1 foto enviada · 2 arquivos ignorados (não são fotos)",
+                UploadBar.describe(new UploadJob.Summary(1, 0, 2, List.of(), true)));
+        assertEquals("Nenhuma foto encontrada no que foi escolhido.",
+                UploadBar.describe(new UploadJob.Summary(0, 0, 0, List.of(), false)));
     }
 
     @Test

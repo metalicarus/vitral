@@ -9,7 +9,7 @@
 | Pasta | O que é | Tecnologia | Status |
 | --- | --- | --- | --- |
 | [`vitral-backend/`](vitral-backend/) | Servidor: armazena, cataloga e processa as fotos e expõe a API | Java 25, Quarkus | Fundação (M0) em andamento |
-| [`vitral-client/`](vitral-client/) | Aplicativo desktop para navegar pelas fotos do servidor | Java 25, JavaFX, AtlantaFX | Primeira versão: login, galeria e visualizador |
+| [`vitral-client/`](vitral-client/) | Aplicativo desktop para navegar pelas fotos do servidor | Java 25, JavaFX, AtlantaFX | Primeira versão: login, galeria, visualizador e envio de fotos |
 | `vitral-frontend/` | Interface web para navegar, organizar e compartilhar as fotos | SvelteKit | Planejado |
 
 Mais adiante, um app mobile vai cuidar do backup automático do celular, usando a mesma API do servidor. Até lá, o backup pode ser feito com ferramentas de sincronização como o Syncthing, apontando para uma pasta que o servidor monitora.

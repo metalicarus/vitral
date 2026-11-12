@@ -2,13 +2,18 @@
 
 Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas no servidor. Ele fala com o servidor só pela API REST, a mesma que o app mobile e a interface web vão usar.
 
-> **Status:** primeira versão. Faz login, mostra a galeria e abre cada foto no visualizador; ainda não envia fotos.
+> **Status:** primeira versão. Faz login, mostra a galeria, abre cada foto no visualizador e envia fotos ao servidor.
 
 ## O que já faz
 
 - **Login:** pede o endereço do servidor, o e-mail e a senha. Lembra o endereço e o e-mail para a próxima vez; a senha e o token da sessão nunca são gravados.
 - **Galeria:** mostra as fotos da mais recente para a mais antiga, agrupadas por mês, em quadrados que se ajustam à largura da janela. Mais fotos carregam sozinhas conforme você rola.
-- **Miniaturas:** baixadas em segundo plano por poucas conexões de cada vez, com as mais recentes guardadas em memória. Enquanto o servidor ainda gera a miniatura, aparece um relógio no lugar; se ele não conseguiu gerá-la, um alerta.
+- **Miniaturas:** baixadas em segundo plano por poucas conexões de cada vez, com as mais recentes guardadas em memória. Enquanto o servidor ainda gera a miniatura, aparece um relógio no lugar e o app pergunta de novo sozinho, em intervalos crescentes; se o servidor não conseguiu gerá-la, aparece um alerta.
+- **Envio de fotos:** pelo botão **Enviar fotos** (escolhendo fotos ou uma pasta inteira) ou arrastando fotos e pastas para a janela.
+  - O app procura fotos JPEG, PNG, HEIC e WebP, inclusive dentro de subpastas, e pula arquivos e pastas ocultos, como caches.
+  - Antes de enviar, calcula o SHA-256 de cada arquivo e pergunta ao servidor quais ele ainda não tem (`POST /api/v1/assets/check`). Só esses são enviados, então mandar a mesma pasta de novo, ou retomar um envio interrompido, não envia nada repetido. Cópias idênticas dentro da seleção vão uma vez só.
+  - Junto com cada foto vai a data de modificação do arquivo, que o servidor usa como data da foto quando ela não tem EXIF.
+  - Uma barra no rodapé mostra o andamento e permite cancelar. No fim, ela resume o que foi enviado, o que o servidor já tinha e o que falhou, com o motivo de cada falha em **Ver problemas**.
 - **Visualizador:** um clique numa foto a abre do maior tamanho que a janela permite, sobre um fundo escuro. Ele mostra a prévia de até 1440 px, e não o original, que pode ter dezenas de megabytes; enquanto ela carrega, a miniatura aparece ampliada. As fotos vizinhas já vêm carregadas, então passar de uma para outra é imediato.
   - Teclas: **←** e **→** passam entre as fotos, **I** mostra os detalhes (data e de onde ela veio, dimensões, tamanho, formato e data do envio) e **Esc** fecha.
   - **Baixar original** salva o arquivo original numa pasta escolhida, com o nome com que foi enviado. O app lembra a última pasta usada.
@@ -45,13 +50,12 @@ vitral-client/
     ├── VitralClient.java      # A aplicação: tema, janela e troca entre login e galeria
     ├── ClientSettings.java    # O que fica lembrado entre execuções
     ├── api/                   # Cliente da API REST do servidor
-    └── ui/                    # Telas: login, galeria e o carregamento das miniaturas
+    └── ui/                    # Telas (login, galeria, visualizador), carregamento de imagens e envio
 ```
 
 A galeria é uma `ListView` de linhas (o título de um mês ou uma fileira de fotos), e não uma grade com um nó por foto. Assim só as linhas visíveis existem na tela, e a memória não cresce com o tamanho da biblioteca.
 
 ## Próximos passos
 
-- Upload de fotos, pulando as que o servidor já tem (`POST /api/v1/assets/check`)
 - Setup inicial pelo próprio client, quando o servidor ainda não tem administrador
 - Pacote instalável com `jlink`/`jpackage`, sem exigir JDK na máquina
