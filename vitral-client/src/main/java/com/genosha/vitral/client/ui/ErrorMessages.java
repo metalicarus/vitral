@@ -31,9 +31,31 @@ public final class ErrorMessages {
             case "invalid_credentials" -> "E-mail ou senha incorretos.";
             case "login_locked" -> "Muitas tentativas erradas. Espere alguns minutos e tente de novo.";
             case "not_authenticated" -> "Sua sessão expirou. Entre de novo.";
-            default -> error.isUnauthorized()
-                    ? "Sua sessão expirou. Entre de novo."
-                    : "O servidor respondeu com um erro (" + error.code() + ").";
+            case "setup_done" -> "Este servidor já tem um administrador. Entre com a conta dele.";
+            case "email_taken" -> "Já existe uma conta com esse e-mail.";
+            case "invalid_path" -> "Use o caminho completo da pasta no servidor, como /fotos/maria.";
+            // The server uses this code both for a path with no folder (400) and for an unknown watched folder (404).
+            case "folder_not_found" -> error.status() == 404
+                    ? "Essa pasta não é mais monitorada."
+                    : "Não existe uma pasta nesse caminho no servidor.";
+            case "folder_not_readable" -> "O servidor não tem permissão para ler essa pasta.";
+            case "folder_overlaps_data" -> "A pasta não pode ficar dentro da pasta de dados do Vitral, nem contê-la.";
+            case "folder_overlaps" -> "Essa pasta já é monitorada, ou fica dentro de outra pasta monitorada, ou contém uma.";
+            case "owner_not_found" -> "Não existe uma conta com esse e-mail.";
+            default -> {
+                if (error.isUnauthorized()) {
+                    yield "Sua sessão expirou. Entre de novo.";
+                }
+                if (error.status() == 403) {
+                    yield "Só administradores podem fazer isso.";
+                }
+                if (error.status() == 400) {
+                    // Field validation answers in another format, without a Vitral error code.
+                    yield "O servidor recusou os dados. Confira os campos: e-mail válido e senha com pelo menos"
+                            + " 8 caracteres.";
+                }
+                yield "O servidor respondeu com um erro (" + error.code() + ").";
+            }
         };
     }
 }

@@ -8,10 +8,12 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
 import com.genosha.vitral.client.api.Models.ErrorBody;
+import com.genosha.vitral.client.api.Models.Folder;
 import com.genosha.vitral.client.api.Models.HashCheckResult;
 import com.genosha.vitral.client.api.Models.LoginResult;
 import com.genosha.vitral.client.api.Models.ServerInfo;
 import com.genosha.vitral.client.api.Models.UploadResult;
+import com.genosha.vitral.client.api.Models.User;
 
 import java.io.IOException;
 import java.io.InterruptedIOException;
@@ -107,6 +109,64 @@ public final class VitralApi {
         LoginResult result = readJson(send(request), LoginResult.class);
         token = result.token();
         return result;
+    }
+
+    /**
+     * Creates the server's first account, an administrator, and logs in with it. Works only
+     * while the server has no users ({@link ServerInfo#setupRequired()}).
+     */
+    public LoginResult setup(String email, String displayName, String password) throws IOException {
+        HttpRequest request = request("/api/v1/setup")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("email", email, "displayName", displayName, "password", password)))
+                .build();
+        LoginResult result = readJson(send(request), LoginResult.class);
+        token = result.token();
+        return result;
+    }
+
+    /** Every account on the server, oldest first. Administrators only. */
+    public List<User> listUsers() throws IOException {
+        return List.of(readJson(send(get("/api/v1/admin/users")), User[].class));
+    }
+
+    /** Creates an account. Administrators only. */
+    public User createUser(String email, String displayName, String password, boolean admin) throws IOException {
+        HttpRequest request = request("/api/v1/admin/users")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("email", email, "displayName", displayName, "password", password,
+                        "admin", admin)))
+                .build();
+        return readJson(send(request), User.class);
+    }
+
+    /** The watched folders. Administrators only. */
+    public List<Folder> listFolders() throws IOException {
+        return List.of(readJson(send(get("/api/v1/admin/folders")), Folder[].class));
+    }
+
+    /**
+     * Starts watching a folder of the server for a user; its photos are cataloged in the
+     * background. Administrators only.
+     *
+     * @param path an absolute path on the server (inside the container, when it runs in Docker)
+     */
+    public Folder addFolder(String path, String ownerEmail) throws IOException {
+        HttpRequest request = request("/api/v1/admin/folders")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("path", path, "ownerEmail", ownerEmail)))
+                .build();
+        return readJson(send(request), Folder.class);
+    }
+
+    /** Asks the server to scan the folder now instead of at the next periodic scan. */
+    public void scanFolder(UUID folderId) throws IOException {
+        send(request("/api/v1/admin/folders/" + folderId + "/scan").POST(HttpRequest.BodyPublishers.noBody()).build());
+    }
+
+    /** Stops watching the folder; its photos leave the catalog, the files stay where they are. */
+    public void removeFolder(UUID folderId) throws IOException {
+        send(request("/api/v1/admin/folders/" + folderId).DELETE().build());
     }
 
     /** Ends the session on the server and forgets the token. */

@@ -17,10 +17,26 @@ public final class Models {
     public record ServerInfo(String name, String version, boolean setupRequired) {
     }
 
-    public record User(UUID id, String email, String displayName, String role) {
+    public record User(UUID id, String email, String displayName, String role, Instant createdAt) {
+
+        public boolean isAdmin() {
+            return "ADMIN".equals(role);
+        }
     }
 
-    /** {@code POST /api/v1/auth/login}. */
+    /**
+     * A watched folder on the server ({@code /api/v1/admin/folders}), whose photos are
+     * cataloged where they are for one user.
+     *
+     * @param lastScanAt    when the last scan finished; null until the first one does
+     * @param lastScanError why the last scan could not run, or null when it ran
+     * @param photos        photo files the scans found in the folder
+     */
+    public record Folder(UUID id, String path, String ownerEmail, Instant createdAt, Instant lastScanAt,
+                         String lastScanError, long photos) {
+    }
+
+    /** {@code POST /api/v1/auth/login} and {@code POST /api/v1/setup}. */
     public record LoginResult(String token, Instant expiresAt, User user) {
     }
 

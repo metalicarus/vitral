@@ -91,6 +91,17 @@
     -fx-border-radius: 12px;
 }
 
+.admin-view {
+    -fx-background-color: -color-bg-default;
+}
+
+.admin-form {
+    -fx-background-color: -color-bg-subtle;
+    -fx-background-radius: 8px;
+    -fx-border-color: -color-border-muted;
+    -fx-border-radius: 8px;
+}
+
 /* The viewer is always dark, whatever the theme: photos look best on a dark background. */
 .viewer {
     -fx-background-color: #0c0d10;
