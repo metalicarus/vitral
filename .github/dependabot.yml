@@ -1,0 +1,46 @@
+# Dependabot opens pull requests when a dependency has a new version. Each PR goes through
+# CI, so only the ones that stay green need a look.
+#
+# Java libraries and Docker images get patch versions only: the project follows long-term
+# support lines (Java 25, Quarkus 3.33, JavaFX 25), and moving to a new line is a decision
+# to make by hand. GitHub Actions get every version, since they only run the CI.
+# Patches are grouped into one PR per folder each week, to keep the noise down.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  - package-ecosystem: maven
+    directory: /vitral-backend/server
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      servidor:
+        patterns: ["*"]
+
+  - package-ecosystem: maven
+    directory: /vitral-client
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
+    groups:
+      client:
+        patterns: ["*"]
+
+  - package-ecosystem: docker
+    directory: /vitral-backend/docker
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major", "version-update:semver-minor"]
