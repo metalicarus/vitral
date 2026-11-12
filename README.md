@@ -53,7 +53,7 @@ A cada push na `main` e a cada pull request, o GitHub Actions faz três verifica
 
 O workflow fica em [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
-O [Dependabot](.github/dependabot.yml) abre, toda semana, pull requests com as versões novas das dependências, e cada um passa pelo CI. As bibliotecas Java e as imagens Docker recebem só versões de correção, porque o projeto segue linhas LTS (Java 25, Quarkus 3.33, JavaFX 25); a troca de linha é uma decisão feita à mão. As actions do CI recebem qualquer versão.
+O [Dependabot](.github/dependabot.yml) abre, toda semana, pull requests com as versões novas das dependências, e cada um passa pelo CI. As bibliotecas Java recebem só versões de correção, porque o projeto segue linhas LTS (Java 25, Quarkus 3.33, JavaFX 25); a troca de linha é uma decisão feita à mão. As actions do CI recebem qualquer versão. As imagens Docker ficam de fora: as tags usadas já recebem as correções a cada build, e o Dependabot confundiria a troca de versão do Java com uma correção.
 
 ## Decisões de arquitetura
 
