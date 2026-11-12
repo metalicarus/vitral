@@ -1,0 +1,62 @@
+/* Vitral's own touches on top of the AtlantaFX Primer theme. Colors come from the theme's
+   variables (-color-...), so both the light and the dark theme stay consistent. */
+
+.brand {
+    -fx-graphic-text-gap: 8px;
+}
+
+.brand .ikonli-font-icon {
+    -fx-icon-color: -color-accent-fg;
+}
+
+.login-view {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.app-header {
+    -fx-background-color: -color-bg-default;
+    -fx-border-color: transparent transparent -color-border-muted transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.gallery-view {
+    -fx-background-color: -color-bg-default;
+}
+
+/* The gallery is a list of lines; it should look like one continuous page. */
+.gallery,
+.gallery .list-cell,
+.gallery .list-cell:filled,
+.gallery .list-cell:selected,
+.gallery .list-cell:filled:hover {
+    -fx-background-color: -color-bg-default;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+}
+
+.gallery .list-cell {
+    -fx-padding: 0 0 0 16px;
+}
+
+.month-header {
+    -fx-padding: 20px 0 10px 0;
+    -fx-text-fill: -color-fg-default;
+}
+
+.tile {
+    -fx-background-color: -color-bg-subtle;
+}
+
+.tile:hover {
+    -fx-opacity: 0.88;
+}
+
+.tile-placeholder {
+    -fx-icon-size: 28px;
+    -fx-icon-color: -color-fg-subtle;
+}
+
+.state-icon {
+    -fx-icon-size: 48px;
+    -fx-icon-color: -color-fg-subtle;
+}
