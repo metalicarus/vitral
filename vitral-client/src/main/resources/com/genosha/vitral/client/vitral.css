@@ -196,3 +196,24 @@
     -fx-text-fill: #f28b82;
     -fx-icon-color: #f28b82;
 }
+
+/* Albums: cards with the cover on top. */
+.albums-pane,
+.albums-scroll,
+.albums-scroll > .viewport {
+    -fx-background-color: -color-bg-default;
+    -fx-background-insets: 0;
+    -fx-border-width: 0;
+}
+
+.album-card {
+    -fx-cursor: hand;
+}
+
+.album-card:hover .album-cover {
+    -fx-opacity: 0.88;
+}
+
+.album-cover {
+    -fx-background-color: -color-bg-subtle;
+}

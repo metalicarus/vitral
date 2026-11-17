@@ -5,6 +5,7 @@ import atlantafx.base.theme.Styles;
 import atlantafx.base.theme.Tweaks;
 import com.genosha.vitral.client.ClientSettings;
 import com.genosha.vitral.client.api.ApiException;
+import com.genosha.vitral.client.api.Models.Album;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
 import com.genosha.vitral.client.api.Models.HashCheckResult;
@@ -26,6 +27,7 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
@@ -91,7 +93,14 @@ public class GalleryView extends StackPane {
     private boolean loading;
     /** Which photos are shown: the timeline, favorites, the archive or the trash. */
     private LibraryView view = LibraryView.TIMELINE;
+    /** True while the "Álbuns" pill is selected; {@link #album} then says whether one is open. */
+    private boolean albumsMode;
+    /** The album whose photos are shown, or null. */
+    private Album album;
     private final Node trashBanner = trashBanner();
+    private final Label albumTitle = new Label();
+    private final Label albumCount = new Label();
+    private final Node albumBar = albumBar();
     /** Bumped on every reload, so answers to requests made before it are ignored. */
     private int generation;
     private int columns;
@@ -123,7 +132,7 @@ public class GalleryView extends StackPane {
 
         layout.setTop(header(onLogout));
         VBox.setVgrow(content, Priority.ALWAYS);
-        layout.setCenter(new VBox(trashBanner, content));
+        layout.setCenter(new VBox(trashBanner, albumBar, content));
         layout.setBottom(new VBox(uploadBar, loadingMore));
         getChildren().addAll(layout, dropHint);
         getStyleClass().add("gallery-view");
@@ -352,8 +361,13 @@ public class GalleryView extends StackPane {
         }
 
         @Override
-        public LibraryView view() {
-            return view;
+        public boolean inTrash() {
+            return !albumsMode && view == LibraryView.TRASH;
+        }
+
+        @Override
+        public Album album() {
+            return album;
         }
 
         @Override
@@ -362,12 +376,13 @@ public class GalleryView extends StackPane {
             if (index < 0) {
                 return;
             }
-            if (view.contains(updated)) {
+            if (shows(updated)) {
                 assets.set(index, updated);
             } else {
                 assets.remove(index);
             }
             assetsChanged();
+            refreshAlbum();
         }
 
         @Override
@@ -377,6 +392,7 @@ public class GalleryView extends StackPane {
                 assets.remove(index);
                 assetsChanged();
             }
+            refreshAlbum();
         }
     }
 
@@ -444,8 +460,12 @@ public class GalleryView extends StackPane {
         return header;
     }
 
-    /** Starts over from the newest photo. */
+    /** Starts over from the newest photo, or reloads the list of albums. */
     private void reload() {
+        if (albumsMode && album == null) {
+            showAlbums();
+            return;
+        }
         generation++;
         assets.clear();
         nextCursor = null;
@@ -471,7 +491,10 @@ public class GalleryView extends StackPane {
             showLoadingMore(true);
         }
         LibraryView requestView = view;
-        Background.run(() -> session.api().listAssets(requestView, PAGE_SIZE, cursor), page -> {
+        Album requestAlbum = album;
+        Background.run(() -> requestAlbum != null
+                ? session.api().albumPhotos(requestAlbum.id(), PAGE_SIZE, cursor)
+                : session.api().listAssets(requestView, PAGE_SIZE, cursor), page -> {
             if (requestGeneration == generation) {
                 pageLoaded(page);
             }
@@ -584,6 +607,10 @@ public class GalleryView extends StackPane {
     }
 
     private Node emptyState() {
+        if (album != null) {
+            return centeredState(Feather.BOOK_OPEN, "Este álbum está vazio",
+                    "Abra uma foto e use “Adicionar a um álbum”, ou aperte A, para ela aparecer aqui.", null);
+        }
         return switch (view) {
             case TIMELINE -> centeredState(Feather.IMAGE, "Nenhuma foto ainda",
                     "Use “Enviar fotos” ou arraste fotos e pastas para esta janela. Elas aparecem aqui,"
@@ -598,20 +625,30 @@ public class GalleryView extends StackPane {
         };
     }
 
-    /** Pills to switch between the timeline, favorites, the archive and the trash. */
+    /** What the "Álbuns" pill selects, next to the library views. */
+    private static final Object ALBUMS = new Object();
+
+    private record Pill(String name, Feather icon, Object target) {
+    }
+
+    /** Pills to switch between the timeline, favorites, albums, the archive and the trash. */
     private Node viewSwitcher() {
-        LibraryView[] views = LibraryView.values();
-        String[] names = {"Fotos", "Favoritas", "Arquivo", "Lixeira"};
-        Feather[] icons = {Feather.IMAGE, Feather.STAR, Feather.ARCHIVE, Feather.TRASH_2};
+        List<Pill> entries = List.of(
+                new Pill("Fotos", Feather.IMAGE, LibraryView.TIMELINE),
+                new Pill("Favoritas", Feather.STAR, LibraryView.FAVORITES),
+                new Pill("Álbuns", Feather.BOOK_OPEN, ALBUMS),
+                new Pill("Arquivo", Feather.ARCHIVE, LibraryView.ARCHIVE),
+                new Pill("Lixeira", Feather.TRASH_2, LibraryView.TRASH));
         ToggleGroup group = new ToggleGroup();
         HBox pills = new HBox();
-        for (int i = 0; i < views.length; i++) {
-            ToggleButton pill = new ToggleButton(names[i], new FontIcon(icons[i]));
+        for (int i = 0; i < entries.size(); i++) {
+            Pill entry = entries.get(i);
+            ToggleButton pill = new ToggleButton(entry.name(), new FontIcon(entry.icon()));
             pill.setToggleGroup(group);
-            pill.setUserData(views[i]);
-            pill.setSelected(views[i] == view);
+            pill.setUserData(entry.target());
+            pill.setSelected(entry.target() == view);
             pill.setFocusTraversable(false);
-            pill.getStyleClass().add(i == 0 ? Styles.LEFT_PILL : i == views.length - 1 ? Styles.RIGHT_PILL
+            pill.getStyleClass().add(i == 0 ? Styles.LEFT_PILL : i == entries.size() - 1 ? Styles.RIGHT_PILL
                     : Styles.CENTER_PILL);
             pills.getChildren().add(pill);
         }
@@ -619,21 +656,146 @@ public class GalleryView extends StackPane {
             if (selected == null) {
                 // Clicking the selected pill again would leave none selected.
                 old.setSelected(true);
+            } else if (selected.getUserData() instanceof LibraryView libraryView) {
+                showView(libraryView);
             } else {
-                showView((LibraryView) selected.getUserData());
+                showAlbums();
             }
         });
         return pills;
     }
 
     private void showView(LibraryView newView) {
-        if (newView == view) {
+        if (!albumsMode && newView == view) {
             return;
         }
+        albumsMode = false;
+        album = null;
         view = newView;
-        trashBanner.setVisible(view == LibraryView.TRASH);
-        trashBanner.setManaged(view == LibraryView.TRASH);
+        updateBars();
         reload();
+    }
+
+    /** The list of albums, with their covers. */
+    private void showAlbums() {
+        albumsMode = true;
+        album = null;
+        updateBars();
+        // Answers to photo requests made before this are ignored.
+        generation++;
+        assets.clear();
+        nextCursor = null;
+        loading = false;
+        list.getItems().clear();
+        showLoadingMore(false);
+        content.getChildren().setAll(new AlbumsPane(session.api(), thumbnails, this::openAlbum, this::onError));
+    }
+
+    private void openAlbum(Album opened) {
+        album = opened;
+        updateBars();
+        reload();
+    }
+
+    /** Shows the banner of the trash or the bar of the open album, as the current view asks. */
+    private void updateBars() {
+        boolean inTrash = !albumsMode && view == LibraryView.TRASH;
+        trashBanner.setVisible(inTrash);
+        trashBanner.setManaged(inTrash);
+        albumBar.setVisible(album != null);
+        albumBar.setManaged(album != null);
+        if (album != null) {
+            albumTitle.setText(album.name());
+            albumCount.setText(Formats.count((int) album.photos(), "foto", "fotos"));
+        }
+    }
+
+    /** Fetches the open album again, for its photo count after photos left it. */
+    private void refreshAlbum() {
+        Album current = album;
+        if (current == null) {
+            return;
+        }
+        Background.run(() -> session.api().getAlbum(current.id()), updated -> {
+            if (album != null && album.id().equals(updated.id())) {
+                album = updated;
+                updateBars();
+            }
+        }, this::onError);
+    }
+
+    /** Above an open album: the way back to the albums, its name, and renaming or deleting it. */
+    private Node albumBar() {
+        Button back = new Button("Álbuns", new FontIcon(Feather.ARROW_LEFT));
+        back.getStyleClass().add(Styles.FLAT);
+        back.setOnAction(event -> showAlbums());
+        albumTitle.getStyleClass().add(Styles.TITLE_3);
+        albumCount.getStyleClass().add(Styles.TEXT_MUTED);
+        Button rename = new Button("Renomear", new FontIcon(Feather.EDIT_2));
+        rename.getStyleClass().add(Styles.FLAT);
+        rename.setOnAction(event -> renameAlbum());
+        Button delete = new Button("Apagar álbum", new FontIcon(Feather.TRASH));
+        delete.getStyleClass().addAll(Styles.FLAT, Styles.DANGER);
+        delete.setOnAction(event -> deleteAlbum());
+        HBox bar = new HBox(12, back, albumTitle, albumCount, new Spacer(), rename, delete);
+        bar.setAlignment(Pos.CENTER_LEFT);
+        bar.setPadding(new Insets(8, SIDE_PADDING, 0, SIDE_PADDING));
+        bar.setVisible(false);
+        bar.setManaged(false);
+        return bar;
+    }
+
+    private void renameAlbum() {
+        Album current = album;
+        TextInputDialog dialog = new TextInputDialog(current.name());
+        dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Renomear álbum");
+        dialog.setHeaderText("Novo nome para “" + current.name() + "”");
+        dialog.setContentText("Nome:");
+        dialog.showAndWait().map(String::strip).filter(name -> !name.isEmpty() && !name.equals(current.name()))
+                .ifPresent(name -> Background.run(() -> session.api().renameAlbum(current.id(), name), renamed -> {
+                    album = renamed;
+                    updateBars();
+                }, this::showError));
+    }
+
+    private void deleteAlbum() {
+        Album current = album;
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "As fotos continuam na sua biblioteca; só o álbum deixa de existir.", ButtonType.CANCEL, ButtonType.OK);
+        confirm.initOwner(getScene().getWindow());
+        confirm.setTitle("Apagar álbum");
+        confirm.setHeaderText("Apagar o álbum “" + current.name() + "”?");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+        Background.run(() -> {
+            session.api().deleteAlbum(current.id());
+            return null;
+        }, ignored -> showAlbums(), this::showError);
+    }
+
+    /** Sends the user back to the login when the session expired; other errors are shown where they happened. */
+    private void onError(Throwable error) {
+        if (error instanceof ApiException api && api.isUnauthorized()) {
+            onSessionExpired.run();
+        }
+    }
+
+    private void showError(Throwable error) {
+        onError(error);
+        if (error instanceof ApiException api && api.isUnauthorized()) {
+            return;
+        }
+        Alert failure = new Alert(Alert.AlertType.ERROR, ErrorMessages.describe(error));
+        failure.initOwner(getScene().getWindow());
+        failure.setHeaderText("Não foi possível concluir");
+        failure.showAndWait();
+    }
+
+    /** Whether the photo still belongs in what is shown: the open album or the current view. */
+    private boolean shows(Asset asset) {
+        return album != null ? asset.trashedAt() == null : view.contains(asset);
     }
 
     /** Shown above the trash: how long photos stay, and a way to empty it. */

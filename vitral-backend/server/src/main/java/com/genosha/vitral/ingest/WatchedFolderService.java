@@ -11,6 +11,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import org.jboss.logging.Logger;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -23,6 +24,8 @@ import java.util.UUID;
 /** Adds, lists and removes watched folders. Only administrators reach it, through {@link WatchedFolderResource}. */
 @ApplicationScoped
 public class WatchedFolderService {
+
+    private static final Logger LOG = Logger.getLogger(WatchedFolderService.class);
 
     @Inject
     VitralConfig config;
@@ -76,6 +79,7 @@ public class WatchedFolderService {
         });
         originals.register(created.id, folder);
         watcher.requestScan(created.id, Duration.ZERO);
+        LOG.infof("Watching %s for %s; the first scan starts now", folder, ownerEmail);
         return created;
     }
 
@@ -122,6 +126,8 @@ public class WatchedFolderService {
         }
         originals.forget(folderId);
         removed.forEach(asset -> derivatives.deleteQuietly(asset.ownerId(), asset.assetId()));
+        LOG.infof("Stopped watching folder %s; %d photo(s) left the catalog, its files were not touched", folderId,
+                removed.size());
         return true;
     }
 
