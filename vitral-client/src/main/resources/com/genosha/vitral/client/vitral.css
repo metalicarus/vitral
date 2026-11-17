@@ -170,3 +170,29 @@
     -fx-padding: 2px 0 0 0;
     -fx-border-width: 0;
 }
+
+.tile-favorite {
+    -fx-font-size: 18px;
+    -fx-text-fill: #ffd54a;
+    -fx-effect: dropshadow(gaussian, rgba(0, 0, 0, 0.7), 4, 0.4, 0, 1);
+}
+
+.trash-banner {
+    -fx-background-color: -color-warning-subtle;
+    -fx-border-color: transparent transparent -color-warning-muted transparent;
+    -fx-border-width: 0 0 1px 0;
+}
+
+.viewer .favorite-toggle:selected {
+    -fx-background-color: transparent;
+}
+
+.viewer .favorite-toggle:selected .ikonli-font-icon {
+    -fx-icon-color: #ffd54a;
+}
+
+.viewer .viewer-danger,
+.viewer .viewer-danger .ikonli-font-icon {
+    -fx-text-fill: #f28b82;
+    -fx-icon-color: #f28b82;
+}

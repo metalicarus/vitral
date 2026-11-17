@@ -97,7 +97,7 @@ class VitralApiTest {
 
         AssetPage page = api.listAssets(50, "djF8MTIzfGFi");
 
-        assertEquals(List.of("limit=50&cursor=djF8MTIzfGFi"), queries);
+        assertEquals(List.of("view=timeline&limit=50&cursor=djF8MTIzfGFi"), queries);
         assertEquals(id, page.items().getFirst().id());
         assertEquals("djF8MTIzfGFi", page.nextCursor());
         // A status this client does not know yet must not break the whole page.
@@ -316,6 +316,43 @@ class VitralApiTest {
         assertEquals(null, folders.getFirst().lastScanAt());
         assertEquals(List.of("POST /api/v1/admin/folders", "GET /api/v1/admin/folders",
                 "POST /api/v1/admin/folders/" + id + "/scan", "DELETE /api/v1/admin/folders/" + id), calls);
+    }
+
+    @Test
+    void organizesPhotos() throws IOException {
+        UUID id = UUID.randomUUID();
+        List<String> calls = new ArrayList<>();
+        server.createContext("/api/v1/assets", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String call = exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath().replace(id.toString(), "ID")
+                    + (exchange.getRequestURI().getRawQuery() == null ? "" : "?" + exchange.getRequestURI().getRawQuery())
+                    + (body.isEmpty() ? "" : " " + body);
+            calls.add(call);
+            switch (exchange.getRequestMethod()) {
+                case "DELETE" -> {
+                    exchange.sendResponseHeaders(204, -1);
+                    exchange.close();
+                }
+                default -> write(exchange, 200, call.contains("/trash/empty") ? "{\"deleted\":3}"
+                        : call.contains("view=") ? "{\"items\":[],\"nextCursor\":null}" : assetJson(id));
+            }
+        });
+
+        api.listAssets(Models.LibraryView.TRASH, 10, null);
+        api.updateAsset(id, true, null);
+        api.trash(id);
+        api.restore(id);
+        api.deleteForGood(id);
+        int emptied = api.emptyTrash();
+
+        assertEquals(3, emptied);
+        assertEquals(List.of(
+                "GET /api/v1/assets?view=trash&limit=10",
+                "PATCH /api/v1/assets/ID {\"favorite\":true}",
+                "POST /api/v1/assets/ID/trash",
+                "POST /api/v1/assets/ID/restore",
+                "DELETE /api/v1/assets/ID",
+                "POST /api/v1/assets/trash/empty"), calls);
     }
 
     private static String assetJson(UUID id) {

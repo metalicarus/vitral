@@ -2,6 +2,7 @@ package com.genosha.vitral.client.api;
 
 import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -58,12 +59,44 @@ public final class Models {
     }
 
     /**
-     * @param camera   how the photo was taken, or null when the file says nothing about it
-     * @param location where it was taken, or null when it has no GPS position
+     * @param camera    how the photo was taken, or null when the file says nothing about it
+     * @param location  where it was taken, or null when it has no GPS position
+     * @param archived  kept out of the timeline, shown only in the archive
+     * @param trashedAt when it went to the trash, or null when it is not there
      */
     public record Asset(UUID id, String type, String originalFileName, String mimeType, long sizeBytes,
                         Integer width, Integer height, Instant takenAt, TakenAtSource takenAtSource,
-                        Instant uploadedAt, ThumbnailStatus thumbnailStatus, Camera camera, Location location) {
+                        Instant uploadedAt, ThumbnailStatus thumbnailStatus, Camera camera, Location location,
+                        boolean favorite, boolean archived, Instant trashedAt) {
+    }
+
+    /** Which photos a listing shows (the {@code view} parameter of {@code GET /api/v1/assets}). */
+    public enum LibraryView {
+        /** Everything not archived nor in the trash. */
+        TIMELINE,
+        /** Favorites outside the trash, archived or not. */
+        FAVORITES,
+        ARCHIVE,
+        TRASH;
+
+        public String parameter() {
+            return name().toLowerCase(Locale.ROOT);
+        }
+
+        /** Whether the photo belongs here, as the server decides it; used after changing a photo. */
+        public boolean contains(Asset asset) {
+            boolean trashed = asset.trashedAt() != null;
+            return switch (this) {
+                case TIMELINE -> !asset.archived() && !trashed;
+                case FAVORITES -> asset.favorite() && !trashed;
+                case ARCHIVE -> asset.archived() && !trashed;
+                case TRASH -> trashed;
+            };
+        }
+    }
+
+    /** {@code POST /api/v1/assets/trash/empty}. */
+    public record EmptyTrashResult(int deleted) {
     }
 
     /**

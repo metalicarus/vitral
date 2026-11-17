@@ -6,13 +6,15 @@ import java.util.UUID;
 /**
  * What the API exposes about an asset. The location on disk stays private.
  *
- * @param camera   how the photo was taken, or null when the file says nothing about it
- * @param location where the photo was taken, or null when it has no GPS position
+ * @param camera    how the photo was taken, or null when the file says nothing about it
+ * @param location  where the photo was taken, or null when it has no GPS position
+ * @param trashedAt when the photo went to the trash, or null when it is not there
  */
 public record AssetView(UUID id, AssetType type, String originalFileName, String mimeType, long sizeBytes,
                         String sha256, Integer width, Integer height, Instant takenAt,
                         TakenAtSource takenAtSource, Instant uploadedAt, ThumbnailStatus thumbnailStatus,
-                        Camera camera, Location location) {
+                        Camera camera, Location location, boolean favorite, boolean archived,
+                        Instant trashedAt) {
 
     /** Every field may be null; the record itself is null only when all of them would be. */
     public record Camera(String make, String model, String lens, Double fNumber, Double exposureSeconds,
@@ -26,7 +28,8 @@ public record AssetView(UUID id, AssetType type, String originalFileName, String
     public static AssetView of(Asset asset) {
         return new AssetView(asset.id, asset.type, asset.originalFileName, asset.mimeType, asset.sizeBytes,
                 asset.sha256, asset.width, asset.height, asset.takenAt, asset.takenAtSource, asset.uploadedAt,
-                asset.thumbnailStatus, camera(asset), location(asset));
+                asset.thumbnailStatus, camera(asset), location(asset), asset.favorite, asset.archived,
+                asset.trashedAt);
     }
 
     private static Camera camera(Asset asset) {

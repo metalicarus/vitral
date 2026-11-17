@@ -164,7 +164,8 @@ A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que
 
 **M2 · Interface web (fecha a primeira metade)**
 - [ ] Linha do tempo e visualizador
-- [ ] Álbuns, favoritos, arquivo e lixeira
+- [x] Favoritos, arquivo e lixeira (fotos apagadas ficam 30 dias na lixeira)
+- [ ] Álbuns
 - [ ] Compartilhamento por usuário e por link
 - [ ] Mapa e busca por metadados *(v1.1)*
 - [ ] Importação do Google Takeout *(v1.1)*
@@ -246,7 +247,24 @@ curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/thumbnail -H 'Authorizat
 
 # Baixa a prévia, para ver a foto em tela cheia sem baixar o original
 curl -OJ http://localhost:8080/api/v1/assets/ID_DA_FOTO/preview -H 'Authorization: Bearer SEU_TOKEN'
+
+# Marca como favorita (ou arquiva, com "archived": true)
+curl -X PATCH http://localhost:8080/api/v1/assets/ID_DA_FOTO \
+  -H 'Authorization: Bearer SEU_TOKEN' -H 'Content-Type: application/json' -d '{"favorite":true}'
+
+# Lista outras visões: favorites, archive ou trash (o padrão é timeline)
+curl 'http://localhost:8080/api/v1/assets?view=favorites' -H 'Authorization: Bearer SEU_TOKEN'
+
+# Manda para a lixeira e restaura
+curl -X POST http://localhost:8080/api/v1/assets/ID_DA_FOTO/trash -H 'Authorization: Bearer SEU_TOKEN'
+curl -X POST http://localhost:8080/api/v1/assets/ID_DA_FOTO/restore -H 'Authorization: Bearer SEU_TOKEN'
+
+# Apaga para sempre uma foto que está na lixeira, ou esvazia a lixeira inteira
+curl -X DELETE http://localhost:8080/api/v1/assets/ID_DA_FOTO -H 'Authorization: Bearer SEU_TOKEN'
+curl -X POST http://localhost:8080/api/v1/assets/trash/empty -H 'Authorization: Bearer SEU_TOKEN'
 ```
+
+Fotos na lixeira saem da linha do tempo e são apagadas para sempre depois de 30 dias. Ao sair da lixeira para sempre, uma foto enviada tem o original apagado da biblioteca. Uma foto de pasta monitorada só sai do catálogo: o Vitral nunca apaga nada nessas pastas. Para o backup, uma foto na lixeira continua contando como já enviada, para um backup não trazer de volta o que você apagou.
 
 ### Pastas monitoradas
 
@@ -255,7 +273,8 @@ Uma pasta monitorada é uma pasta do servidor cujas fotos entram na biblioteca d
 - Fotos novas aparecem poucos segundos depois de chegarem, porque o servidor percebe as mudanças na hora. Além disso, cada pasta é varrida por inteiro a cada 15 minutos e na inicialização, o que cobre o que chegou com o servidor desligado.
 - Uma foto que já está na biblioteca do usuário, por exemplo enviada pelo client, não é duplicada.
 - Uma foto renomeada ou movida dentro da pasta continua sendo a mesma foto na biblioteca.
-- Uma foto apagada da pasta continua no catálogo, sem o original para baixar. Assim, um disco desmontado não esvazia a galeria. A remoção vai chegar junto com a lixeira, no M2.
+- Uma foto apagada da pasta continua no catálogo, sem o original para baixar. Assim, um disco desmontado não esvazia a galeria. Para tirá-la da biblioteca, mande-a para a lixeira.
+- Quando uma foto de pasta monitorada sai da lixeira para sempre, ela deixa o catálogo, mas o arquivo continua na pasta. Enquanto o arquivo não mudar, ele não volta para a biblioteca.
 - Arquivos e pastas ocultos, como `.stfolder` e os temporários do Syncthing, são ignorados.
 
 As pastas são cadastradas por um administrador:
@@ -290,6 +309,7 @@ A pasta não pode estar dentro da pasta de dados do Vitral nem conter essa pasta
 | `VITRAL_MEDIA_WORKERS` | `2` | Quantas fotos têm as miniaturas geradas ao mesmo tempo |
 | `VITRAL_IMPORT_SCAN_INTERVAL` | `PT15M` | De quanto em quanto tempo cada pasta monitorada é varrida por inteiro, além das mudanças percebidas na hora |
 | `VITRAL_IMPORT_SETTLE` | `PT5S` | Quanto tempo um arquivo precisa ficar parado antes de ser catalogado, para não ler fotos ainda sendo gravadas |
+| `VITRAL_TRASH_RETENTION` | `P30D` | Quanto tempo uma foto fica na lixeira, podendo ser restaurada, antes de ser apagada para sempre |
 
 ### Rodando sem Docker
 

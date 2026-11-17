@@ -6,8 +6,10 @@ import com.genosha.vitral.user.auth.CurrentUser;
 import io.quarkus.security.Authenticated;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -36,14 +38,68 @@ public class AssetResource {
     @Inject
     CurrentUser currentUser;
 
+    @Inject
+    AssetOrganizer organizer;
+
     /**
-     * Lists the user's assets, newest first, one page at a time. Query parameters arrive as
-     * strings so that bad values get a clear 400 instead of the 404 JAX-RS gives for
-     * parameters it cannot convert.
+     * Lists the user's assets, newest first, one page at a time. {@code view} picks which:
+     * {@code timeline} (the default: everything not archived or trashed), {@code favorites},
+     * {@code archive} or {@code trash}. Query parameters arrive as strings so that bad values
+     * get a clear 400 instead of the 404 JAX-RS gives for parameters it cannot convert.
      */
     @GET
-    public AssetPage list(@QueryParam("limit") String limit, @QueryParam("cursor") String cursor) {
-        return assets.list(currentUser.get().userId(), parseLimit(limit), parseCursor(cursor));
+    public AssetPage list(@QueryParam("view") String view, @QueryParam("limit") String limit,
+                          @QueryParam("cursor") String cursor) {
+        AssetFilter filter = AssetFilter.parse(view).orElseThrow(() -> ApiException.badRequest("invalid_view",
+                "view must be timeline, favorites, archive or trash."));
+        return assets.list(currentUser.get().userId(), filter, parseLimit(limit), parseCursor(cursor));
+    }
+
+    /** Marks the asset as favorite or not, or moves it to the archive or back. */
+    @PATCH
+    @Path("/{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
+    public AssetView change(@PathParam("id") String id, AssetChanges changes) {
+        if (changes == null) {
+            throw ApiException.badRequest("missing_changes", "Send favorite and/or archived.");
+        }
+        return AssetView.of(organizer.update(currentUser.get().userId(), parseId(id), changes.favorite(),
+                changes.archived()));
+    }
+
+    /** Moves the asset to the trash, where it can be restored for 30 days. */
+    @POST
+    @Path("/{id}/trash")
+    public AssetView trash(@PathParam("id") String id) {
+        return AssetView.of(organizer.trash(currentUser.get().userId(), parseId(id)));
+    }
+
+    /** Takes the asset out of the trash. */
+    @POST
+    @Path("/{id}/restore")
+    public AssetView restore(@PathParam("id") String id) {
+        return AssetView.of(organizer.restore(currentUser.get().userId(), parseId(id)));
+    }
+
+    /**
+     * Deletes the asset for good: it must be in the trash already (409 not_in_trash otherwise).
+     * An uploaded original is deleted with it; a file in a watched folder is left alone.
+     */
+    @DELETE
+    @Path("/{id}")
+    public void delete(@PathParam("id") String id) {
+        organizer.deleteForGood(currentUser.get().userId(), parseId(id));
+    }
+
+    /** Deletes for good everything in the user's trash. */
+    @POST
+    @Path("/trash/empty")
+    public EmptyTrashResult emptyTrash() {
+        return new EmptyTrashResult(organizer.empty(currentUser.get().userId()));
+    }
+
+    /** Body of POST /api/v1/assets/trash/empty. */
+    public record EmptyTrashResult(int deleted) {
     }
 
     /**

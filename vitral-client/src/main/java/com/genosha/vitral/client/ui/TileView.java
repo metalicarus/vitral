@@ -6,7 +6,10 @@ import com.genosha.vitral.client.api.Models.ThumbnailStatus;
 import javafx.animation.FadeTransition;
 import javafx.animation.PauseTransition;
 import javafx.application.Platform;
+import javafx.geometry.Insets;
+import javafx.geometry.Pos;
 import javafx.geometry.Rectangle2D;
+import javafx.scene.control.Label;
 import javafx.scene.control.Tooltip;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
@@ -40,6 +43,8 @@ final class TileView extends StackPane {
     private final Tooltip tooltip = new Tooltip();
     private final Rectangle clip = new Rectangle();
     private final PauseTransition retry = new PauseTransition();
+    /** A filled star: the icon set only has an outlined one, which is hard to see over a photo. */
+    private final Label favoriteBadge = new Label("★");
 
     private Asset asset;
     private double size;
@@ -60,7 +65,11 @@ final class TileView extends StackPane {
         clip.setArcWidth(CORNER_RADIUS * 2);
         clip.setArcHeight(CORNER_RADIUS * 2);
         setClip(clip);
-        getChildren().addAll(placeholder, imageView);
+        favoriteBadge.getStyleClass().add("tile-favorite");
+        favoriteBadge.setVisible(false);
+        StackPane.setAlignment(favoriteBadge, Pos.TOP_RIGHT);
+        StackPane.setMargin(favoriteBadge, new Insets(6));
+        getChildren().addAll(placeholder, imageView, favoriteBadge);
         getStyleClass().add("tile");
         Tooltip.install(this, tooltip);
     }
@@ -68,7 +77,10 @@ final class TileView extends StackPane {
     /** Shows {@code asset} in a square of {@code size} pixels, reusing this node for a different photo if needed. */
     void show(Asset asset, double size) {
         resize(size);
+        // The same photo may come back changed, for example just marked as a favorite.
+        favoriteBadge.setVisible(asset.favorite());
         if (this.asset != null && this.asset.id().equals(asset.id())) {
+            this.asset = asset;
             return;
         }
         cancelPending();
@@ -99,7 +111,7 @@ final class TileView extends StackPane {
     private void load(Asset requested, Duration retryDelay) {
         pending = loader.load(requested.id());
         pending.whenComplete((image, error) -> Platform.runLater(() -> {
-            if (this.asset != requested) {
+            if (!showing(requested)) {
                 return;
             }
             if (image != null) {
@@ -108,7 +120,7 @@ final class TileView extends StackPane {
                 showPlaceholder(Feather.CLOCK);
                 retry.setDuration(retryDelay);
                 retry.setOnFinished(event -> {
-                    if (this.asset == requested) {
+                    if (showing(requested)) {
                         load(requested, retryDelay.multiply(2).lessThan(MAX_RETRY) ? retryDelay.multiply(2) : MAX_RETRY);
                     }
                 });
@@ -117,6 +129,11 @@ final class TileView extends StackPane {
                 showPlaceholder(Feather.ALERT_TRIANGLE);
             }
         }));
+    }
+
+    /** Whether the tile still shows this photo; it may have been reused for another one meanwhile. */
+    private boolean showing(Asset requested) {
+        return asset != null && asset.id().equals(requested.id());
     }
 
     private void resize(double newSize) {

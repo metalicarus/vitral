@@ -7,9 +7,11 @@ import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
+import com.genosha.vitral.client.api.Models.EmptyTrashResult;
 import com.genosha.vitral.client.api.Models.ErrorBody;
 import com.genosha.vitral.client.api.Models.Folder;
 import com.genosha.vitral.client.api.Models.HashCheckResult;
+import com.genosha.vitral.client.api.Models.LibraryView;
 import com.genosha.vitral.client.api.Models.LoginResult;
 import com.genosha.vitral.client.api.Models.ServerInfo;
 import com.genosha.vitral.client.api.Models.UploadResult;
@@ -29,6 +31,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -178,15 +181,64 @@ public final class VitralApi {
         }
     }
 
+    /** One page of the timeline; see {@link #listAssets(LibraryView, int, String)}. */
+    public AssetPage listAssets(int limit, String cursor) throws IOException {
+        return listAssets(LibraryView.TIMELINE, limit, cursor);
+    }
+
     /**
-     * One page of the user's photos, newest first.
+     * One page of the user's photos in a view (timeline, favorites, archive or trash), newest first.
      *
      * @param cursor the previous page's {@code nextCursor}, or null for the first page
      */
-    public AssetPage listAssets(int limit, String cursor) throws IOException {
-        String query = "?limit=" + limit
+    public AssetPage listAssets(LibraryView view, int limit, String cursor) throws IOException {
+        String query = "?view=" + view.parameter() + "&limit=" + limit
                 + (cursor == null ? "" : "&cursor=" + URLEncoder.encode(cursor, StandardCharsets.UTF_8));
         return readJson(send(get("/api/v1/assets" + query)), AssetPage.class);
+    }
+
+    /**
+     * Marks a photo as favorite or not, or moves it to the archive or back.
+     *
+     * @param favorite the new value, or null to leave it as it is
+     * @param archived the new value, or null to leave it as it is
+     */
+    public Asset updateAsset(UUID assetId, Boolean favorite, Boolean archived) throws IOException {
+        Map<String, Object> changes = new HashMap<>();
+        if (favorite != null) {
+            changes.put("favorite", favorite);
+        }
+        if (archived != null) {
+            changes.put("archived", archived);
+        }
+        HttpRequest request = request("/api/v1/assets/" + assetId)
+                .header("Content-Type", "application/json")
+                .method("PATCH", jsonBody(changes))
+                .build();
+        return readJson(send(request), Asset.class);
+    }
+
+    /** Moves a photo to the trash, where it can be restored for 30 days. */
+    public Asset trash(UUID assetId) throws IOException {
+        return readJson(send(request("/api/v1/assets/" + assetId + "/trash")
+                .POST(HttpRequest.BodyPublishers.noBody()).build()), Asset.class);
+    }
+
+    /** Takes a photo out of the trash. */
+    public Asset restore(UUID assetId) throws IOException {
+        return readJson(send(request("/api/v1/assets/" + assetId + "/restore")
+                .POST(HttpRequest.BodyPublishers.noBody()).build()), Asset.class);
+    }
+
+    /** Deletes a photo that is in the trash for good. */
+    public void deleteForGood(UUID assetId) throws IOException {
+        send(request("/api/v1/assets/" + assetId).DELETE().build());
+    }
+
+    /** Deletes for good everything in the trash; returns how many photos went. */
+    public int emptyTrash() throws IOException {
+        return readJson(send(request("/api/v1/assets/trash/empty").POST(HttpRequest.BodyPublishers.noBody()).build()),
+                EmptyTrashResult.class).deleted();
     }
 
     /**

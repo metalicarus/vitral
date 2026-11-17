@@ -9,6 +9,7 @@ Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas 
 - **Login:** pede o endereço do servidor, o e-mail e a senha. Lembra o endereço e o e-mail para a próxima vez; a senha e o token da sessão nunca são gravados.
 - **Primeiro acesso:** num servidor que ainda não tem contas, a tela de login pede também o nome e a confirmação da senha e cria a conta de administrador. Não é preciso nenhum comando para começar.
 - **Galeria:** mostra as fotos da mais recente para a mais antiga, agrupadas por mês, em quadrados que se ajustam à largura da janela. Mais fotos carregam sozinhas conforme você rola.
+- **Visões:** no topo da galeria, **Fotos** (a linha do tempo), **Favoritas**, **Arquivo** e **Lixeira**. As favoritas têm uma estrela na miniatura. A lixeira avisa que as fotos saem para sempre depois de 30 dias e tem o botão **Esvaziar lixeira**.
 - **Miniaturas:** baixadas em segundo plano por poucas conexões de cada vez, com as mais recentes guardadas em memória. Enquanto o servidor ainda gera a miniatura, aparece um relógio no lugar e o app pergunta de novo sozinho, em intervalos crescentes; se o servidor não conseguiu gerá-la, aparece um alerta.
 - **Envio de fotos:** pelo botão **Enviar fotos** (escolhendo fotos ou uma pasta inteira) ou arrastando fotos e pastas para a janela.
   - O app procura fotos JPEG, PNG, HEIC e WebP, inclusive dentro de subpastas, e pula arquivos e pastas ocultos, como caches.
@@ -16,7 +17,8 @@ Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas 
   - Junto com cada foto vai a data de modificação do arquivo, que o servidor usa como data da foto quando ela não tem EXIF.
   - Uma barra no rodapé mostra o andamento e permite cancelar. No fim, ela resume o que foi enviado, o que o servidor já tinha e o que falhou, com o motivo de cada falha em **Ver problemas**.
 - **Visualizador:** um clique numa foto a abre do maior tamanho que a janela permite, sobre um fundo escuro. Ele mostra a prévia de até 1440 px, e não o original, que pode ter dezenas de megabytes; enquanto ela carrega, a miniatura aparece ampliada. As fotos vizinhas já vêm carregadas, então passar de uma para outra é imediato.
-  - Teclas: **←** e **→** passam entre as fotos, **I** mostra os detalhes e **Esc** fecha.
+  - Teclas: **←** e **→** passam entre as fotos, **I** mostra os detalhes, **F** marca como favorita, **Delete** manda para a lixeira e **Esc** fecha.
+  - Botões para favoritar, arquivar (a foto some da linha do tempo e fica no Arquivo) e mandar para a lixeira. Na Lixeira, eles viram **Restaurar** e **Apagar para sempre**. Quando a foto sai da visão aberta, o visualizador passa para a próxima.
   - Os detalhes trazem a data (e de onde ela veio), a câmera, a lente, a exposição (como `f/4 · 1/250 s · ISO 400 · 50 mm`), o local onde a foto foi tirada, as dimensões, o tamanho, o formato e a data do envio. Câmera e local só aparecem quando a foto tem essas informações.
   - **Ver no mapa** abre a posição da foto no OpenStreetMap, no navegador. É o único momento em que o app leva algo para fora do servidor, e só quando você clica.
   - **Baixar original** salva o arquivo original numa pasta escolhida, com o nome com que foi enviado. O app lembra a última pasta usada.
