@@ -1,6 +1,7 @@
 package com.genosha.vitral.client.ui;
 
 import atlantafx.base.theme.Styles;
+import com.genosha.vitral.client.ClientSettings;
 import com.genosha.vitral.client.api.ApiException;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
@@ -17,7 +18,7 @@ import java.util.function.Consumer;
 
 /**
  * The administrators' area, laid over the gallery: the server's accounts and its watched
- * folders. Only shown to administrators; the server checks the role on every call anyway.
+ * folders, and the copies of the database. Only shown to administrators; the server checks the role on every call anyway.
  */
 final class AdminView extends BorderPane {
 
@@ -30,14 +31,14 @@ final class AdminView extends BorderPane {
      *                         photos in it may have changed (a folder was added or removed)
      * @param onSessionExpired called when the server no longer accepts the session
      */
-    AdminView(Session session, Consumer<Boolean> onClose, Runnable onSessionExpired) {
+    AdminView(Session session, ClientSettings settings, Consumer<Boolean> onClose, Runnable onSessionExpired) {
         Consumer<Throwable> onError = error -> {
             if (error instanceof ApiException api && api.isUnauthorized()) {
                 onSessionExpired.run();
             }
         };
         folders = new FoldersPane(session.api(), onError, () -> libraryChanged = true);
-        users = new UsersPane(session.api(), onError, folders::reloadOwners);
+        users = new UsersPane(session.api(), session.user().id(), onError, folders::reloadOwners);
 
         Button back = new Button("Voltar à galeria", new FontIcon(Feather.ARROW_LEFT));
         back.getStyleClass().add(Styles.FLAT);
@@ -53,7 +54,9 @@ final class AdminView extends BorderPane {
         usersTab.setGraphic(new FontIcon(Feather.USERS));
         Tab foldersTab = new Tab("Pastas monitoradas", folders);
         foldersTab.setGraphic(new FontIcon(Feather.FOLDER));
-        TabPane tabs = new TabPane(usersTab, foldersTab);
+        Tab backupsTab = new Tab("Backups", new BackupsPane(session.api(), settings, onError));
+        backupsTab.setGraphic(new FontIcon(Feather.DATABASE));
+        TabPane tabs = new TabPane(usersTab, foldersTab, backupsTab);
         tabs.setTabClosingPolicy(TabPane.TabClosingPolicy.UNAVAILABLE);
         // The folders' scan status is refreshed only while it is on screen.
         tabs.getSelectionModel().selectedItemProperty().addListener((obs, old, tab) -> folders.setActive(tab == foldersTab));

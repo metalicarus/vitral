@@ -107,6 +107,8 @@ public class GalleryView extends StackPane {
     private double tileSize = TARGET_TILE_SIZE;
     private ViewerView viewer;
     private AdminView admin;
+    private AccountView account;
+    private final Button userButton = new Button();
     private UploadJob upload;
     private Thread uploadThread;
 
@@ -187,7 +189,7 @@ public class GalleryView extends StackPane {
     }
 
     private boolean canUpload() {
-        return upload == null && viewer == null && admin == null;
+        return upload == null && viewer == null && admin == null && account == null;
     }
 
     private void chooseFiles() {
@@ -302,11 +304,25 @@ public class GalleryView extends StackPane {
         alert.showAndWait();
     }
 
-    private void openAdmin() {
-        if (admin != null || viewer != null) {
+    private void openAccount() {
+        if (account != null || admin != null || viewer != null) {
             return;
         }
-        admin = new AdminView(session, this::closeAdmin, onSessionExpired);
+        account = new AccountView(session, this::closeAccount, renamed -> userButton.setText(renamed.displayName()),
+                onSessionExpired);
+        getChildren().add(account);
+    }
+
+    private void closeAccount() {
+        getChildren().remove(account);
+        account = null;
+    }
+
+    private void openAdmin() {
+        if (admin != null || viewer != null || account != null) {
+            return;
+        }
+        admin = new AdminView(session, settings, this::closeAdmin, onSessionExpired);
         getChildren().add(admin);
     }
 
@@ -322,7 +338,7 @@ public class GalleryView extends StackPane {
 
     private void openViewer(Asset asset) {
         int index = indexOf(asset.id());
-        if (index < 0 || viewer != null || admin != null) {
+        if (index < 0 || viewer != null || admin != null || account != null) {
             return;
         }
         viewer = new ViewerView(new ViewerHost(), session.api(), thumbnails, previews, settings, zone, index);
@@ -424,9 +440,11 @@ public class GalleryView extends StackPane {
         Label brand = new Label("Vitral", new FontIcon(Feather.APERTURE));
         brand.getStyleClass().addAll(Styles.TITLE_3, "brand");
 
-        Label user = new Label(session.user().displayName(), new FontIcon(Feather.USER));
-        user.getStyleClass().add(Styles.TEXT_MUTED);
-        user.setTooltip(new Tooltip(session.user().email()));
+        userButton.setText(session.user().displayName());
+        userButton.setGraphic(new FontIcon(Feather.USER));
+        userButton.getStyleClass().add(Styles.FLAT);
+        userButton.setTooltip(new Tooltip(session.user().email() + "\nMinha conta: nome, senha e aparelhos"));
+        userButton.setOnAction(event -> openAccount());
 
         Button refresh = new Button(null, new FontIcon(Feather.REFRESH_CW));
         refresh.getStyleClass().addAll(Styles.BUTTON_ICON, Styles.FLAT);
@@ -445,11 +463,11 @@ public class GalleryView extends StackPane {
         uploadButton.getStyleClass().add(Styles.ACCENT);
         uploadButton.setTooltip(new Tooltip("Também dá para arrastar fotos e pastas para esta janela"));
 
-        HBox header = new HBox(12, brand, viewSwitcher(), new Spacer(), uploadButton, user, refresh);
+        HBox header = new HBox(12, brand, viewSwitcher(), new Spacer(), uploadButton, userButton, refresh);
         if (session.user().isAdmin()) {
             Button settings = new Button(null, new FontIcon(Feather.SETTINGS));
             settings.getStyleClass().addAll(Styles.BUTTON_ICON, Styles.FLAT);
-            settings.setTooltip(new Tooltip("Administração: contas e pastas monitoradas"));
+            settings.setTooltip(new Tooltip("Administração: contas, pastas monitoradas e backups"));
             settings.setOnAction(event -> openAdmin());
             header.getChildren().add(settings);
         }

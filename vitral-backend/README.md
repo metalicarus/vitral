@@ -152,6 +152,8 @@ A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que
 - [ ] Licença (AGPL-3.0 proposta)
 - [x] Esqueleto do servidor Quarkus com SQLite e Flyway
 - [x] Contas, login e sessões
+- [x] Minha conta (nome, senha e aparelhos conectados) e gestão das contas pelo administrador: senha, papel e desativação
+- [x] Backup automático do banco, com cópias para baixar
 
 **M1 · Ingestão**
 - [x] Catálogo de fotos: upload, verificação de hashes, listagem, consulta e download do original
@@ -178,7 +180,7 @@ A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que
 - [ ] IA local: rostos, pessoas e busca semântica
 - [ ] Duplicatas, memórias e edição básica não destrutiva
 - [ ] Live Photos, RAW, armazenamento S3 e login via OIDC
-- [ ] Exportação e importação do banco de dados pela API, restrita a administradores
+- [ ] Restauração do banco pela API, restrita a administradores (hoje ela é manual; veja [Backup do banco](#backup-do-banco))
 - [ ] Pasta de dados padrão em `/var/lib/vitral` ao rodar fora do modo de desenvolvimento (o modo de desenvolvimento continua com `data/`)
 - [ ] `VITRAL_LIBRARY_DIR` opcional, para guardar as fotos em outro disco, separadas do banco
 
@@ -289,13 +291,42 @@ curl -X DELETE http://localhost:8080/api/v1/albums/ID_DO_ALBUM -H 'Authorization
 
 Uma foto pode estar em vários álbuns. Na lixeira, ela some dos álbuns e volta se for restaurada; apagada para sempre, sai de todos. Sem uma capa escolhida, a foto mais recente do álbum é a capa.
 
+### Contas
+
+Cada pessoa cuida da própria conta, e um administrador cuida das contas dos outros:
+
+```bash
+# Troca o nome que aparece no Vitral
+curl -X PATCH http://localhost:8080/api/v1/users/me -H 'Authorization: Bearer SEU_TOKEN' \
+  -H 'Content-Type: application/json' -d '{"displayName":"Maria Souza"}'
+
+# Troca a senha: os outros aparelhos são desconectados, este continua conectado
+curl -X POST http://localhost:8080/api/v1/users/me/password -H 'Authorization: Bearer SEU_TOKEN' \
+  -H 'Content-Type: application/json' -d '{"currentPassword":"SENHA_ATUAL","newPassword":"SENHA_NOVA"}'
+
+# Lista os aparelhos conectados e desconecta um deles
+curl http://localhost:8080/api/v1/auth/sessions -H 'Authorization: Bearer SEU_TOKEN'
+curl -X DELETE http://localhost:8080/api/v1/auth/sessions/ID_DA_SESSAO -H 'Authorization: Bearer SEU_TOKEN'
+
+# Administrador: define uma senha nova para quem esqueceu a sua (todos os aparelhos da conta saem)
+curl -X POST http://localhost:8080/api/v1/admin/users/ID_DA_CONTA/password -H 'Authorization: Bearer TOKEN_DO_ADMIN' \
+  -H 'Content-Type: application/json' -d '{"newPassword":"SENHA_NOVA"}'
+
+# Administrador: torna a conta administradora ("admin": false volta a membro) ou a desativa ("disabled": false reativa)
+curl -X PATCH http://localhost:8080/api/v1/admin/users/ID_DA_CONTA -H 'Authorization: Bearer TOKEN_DO_ADMIN' \
+  -H 'Content-Type: application/json' -d '{"disabled":true}'
+```
+
+Uma conta desativada não entra mais (o login responde `403 account_disabled`) e os aparelhos dela são desconectados, mas as fotos, os álbuns e as pastas monitoradas continuam lá, e voltam quando ela é reativada. Um administrador não muda o papel nem desativa a própria conta, então o servidor sempre tem pelo menos um administrador ativo.
+
 ### Logs
 
 O servidor registra cada evento importante, com o e-mail de quem fez em cada linha de um pedido autenticado:
 
 - **Na inicialização:** a versão, a pasta de dados, o fuso e a configuração em uso.
 - **Cada pedido HTTP:** endereço do cliente, rota, status, tamanho e tempo de resposta.
-- **Acesso:** logins (e tentativas com senha errada, como aviso), bloqueios por tentativas, setup, contas criadas e sessões encerradas.
+- **Acesso:** logins (e tentativas com senha errada, como aviso), bloqueios por tentativas, setup, contas criadas, trocas de nome e de senha, senhas redefinidas, mudanças de papel, contas desativadas e reativadas, e sessões encerradas.
+- **Backups:** cada cópia do banco feita, com o tamanho e o tempo, e as cópias antigas apagadas.
 - **Fotos:** uploads, idas e voltas da lixeira, exclusões definitivas e a limpeza automática da lixeira.
 - **Pastas e álbuns:** pastas cadastradas e removidas, resumo de cada varredura, álbuns criados, renomeados e apagados, fotos adicionadas e tiradas.
 - **Em `DEBUG`:** cada miniatura gerada (com o tempo), cada arquivo das varreduras, cada mudança percebida nas pastas e as respostas de erro da API.
@@ -339,6 +370,25 @@ curl -X DELETE http://localhost:8080/api/v1/admin/folders/ID_DA_PASTA -H 'Author
 
 A pasta não pode estar dentro da pasta de dados do Vitral nem conter essa pasta, e duas pastas monitoradas não podem se sobrepor. No Linux, cada subpasta usa um "watch" do inotify. Com dezenas de milhares de subpastas, pode ser preciso aumentar `fs.inotify.max_user_watches`; enquanto isso, as fotos novas continuam aparecendo pela varredura periódica.
 
+### Backup do banco
+
+O banco (`vitral.db`) guarda as contas, os álbuns, as favoritas, a lixeira e todo o catálogo. O servidor faz uma cópia dele sozinho, por padrão uma vez por dia, em `<pasta de dados>/backups/`, e guarda as últimas 7. A primeira sai poucos minutos depois de o servidor subir. A cópia é feita com o servidor funcionando (`VACUUM INTO` do SQLite), é consistente e não trava ninguém.
+
+As fotos **não** entram na cópia: elas ficam em pastas comuns (`<pasta de dados>/library/` e as pastas monitoradas), e o backup delas é feito como o de qualquer arquivo, com rsync, restic ou o que você já usa. Para um backup completo, guarde as duas coisas juntas.
+
+```bash
+# Lista as cópias, da mais recente para a mais antiga
+curl http://localhost:8080/api/v1/admin/backups -H 'Authorization: Bearer TOKEN_DO_ADMIN'
+
+# Faz uma cópia agora, por exemplo antes de atualizar o servidor
+curl -X POST http://localhost:8080/api/v1/admin/backups -H 'Authorization: Bearer TOKEN_DO_ADMIN'
+
+# Baixa uma cópia, para guardar fora do servidor
+curl -OJ http://localhost:8080/api/v1/admin/backups/vitral-2026-11-17T10-00-00Z.db -H 'Authorization: Bearer TOKEN_DO_ADMIN'
+```
+
+Para restaurar uma cópia: pare o servidor, guarde o `vitral.db` atual em outro lugar, apague os arquivos `vitral.db-wal` e `vitral.db-shm` se existirem, copie o backup para a pasta de dados com o nome `vitral.db` e suba o servidor de novo.
+
 ### Configuração
 
 | Variável de ambiente | Padrão | Para que serve |
@@ -351,6 +401,9 @@ A pasta não pode estar dentro da pasta de dados do Vitral nem conter essa pasta
 | `VITRAL_IMPORT_SCAN_INTERVAL` | `PT15M` | De quanto em quanto tempo cada pasta monitorada é varrida por inteiro, além das mudanças percebidas na hora |
 | `VITRAL_IMPORT_SETTLE` | `PT5S` | Quanto tempo um arquivo precisa ficar parado antes de ser catalogado, para não ler fotos ainda sendo gravadas |
 | `VITRAL_TRASH_RETENTION` | `P30D` | Quanto tempo uma foto fica na lixeira, podendo ser restaurada, antes de ser apagada para sempre |
+| `VITRAL_BACKUP_ENABLED` | `true` | Faz as cópias automáticas do banco; `false` desliga (a cópia manual pela API continua funcionando) |
+| `VITRAL_BACKUP_INTERVAL` | `P1D` | De quanto em quanto tempo o banco é copiado |
+| `VITRAL_BACKUP_KEEP` | `7` | Quantas cópias são guardadas; as mais antigas são apagadas |
 | `VITRAL_LOG_LEVEL` | `INFO` | Detalhe dos logs do Vitral: `INFO` registra cada evento; `DEBUG` acrescenta detalhes, como cada miniatura gerada |
 | `QUARKUS_HTTP_ACCESS_LOG_ENABLED` | `true` | Registra cada pedido HTTP no log; `false` desliga |
 

@@ -22,6 +22,8 @@ class FormatsTest {
     void datesUseTheGivenTimeZone() {
         assertEquals("14 de julho de 2024, 16:32",
                 Formats.dateTime(Instant.parse("2024-07-14T19:32:10Z"), ZoneId.of("America/Sao_Paulo")));
+        assertEquals("14/07/2024 16:32",
+                Formats.shortDateTime(Instant.parse("2024-07-14T19:32:10Z"), ZoneId.of("America/Sao_Paulo")));
     }
 
     @Test

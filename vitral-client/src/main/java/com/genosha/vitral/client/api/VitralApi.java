@@ -8,6 +8,8 @@ import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.genosha.vitral.client.api.Models.Album;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
+import com.genosha.vitral.client.api.Models.Backup;
+import com.genosha.vitral.client.api.Models.DeviceSession;
 import com.genosha.vitral.client.api.Models.EmptyTrashResult;
 import com.genosha.vitral.client.api.Models.ErrorBody;
 import com.genosha.vitral.client.api.Models.Folder;
@@ -265,10 +267,15 @@ public final class VitralApi {
      * so a failed download never leaves a broken file under the final name.
      */
     public void downloadOriginal(UUID assetId, Path target) throws IOException {
+        download("/api/v1/assets/" + assetId + "/original", target);
+    }
+
+    /** Streams a file from the server to {@code target}, through a {@code .part} file; see {@link #downloadOriginal}. */
+    private void download(String path, Path target) throws IOException {
         Path partial = target.resolveSibling(target.getFileName() + ".part");
         HttpResponse<Download> response;
         try {
-            response = http.send(get("/api/v1/assets/" + assetId + "/original"), info -> info.statusCode() == 200
+            response = http.send(get(path), info -> info.statusCode() == 200
                     ? HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofFile(partial),
                     file -> new Download(file, null))
                     : HttpResponse.BodySubscribers.mapping(HttpResponse.BodySubscribers.ofByteArray(),
@@ -276,7 +283,7 @@ public final class VitralApi {
         } catch (InterruptedException e) {
             Files.deleteIfExists(partial);
             Thread.currentThread().interrupt();
-            throw new InterruptedIOException("Interrupted while downloading asset " + assetId);
+            throw new InterruptedIOException("Interrupted while downloading " + path);
         } catch (IOException e) {
             Files.deleteIfExists(partial);
             throw e;
@@ -289,6 +296,79 @@ public final class VitralApi {
 
     /** Either the downloaded file or, when the server refused, its error body. */
     private record Download(Path file, byte[] error) {
+    }
+
+    /** Changes the name shown for the logged-in user. */
+    public User updateProfile(String displayName) throws IOException {
+        HttpRequest request = request("/api/v1/users/me")
+                .header("Content-Type", "application/json")
+                .method("PATCH", jsonBody(Map.of("displayName", displayName)))
+                .build();
+        return readJson(send(request), User.class);
+    }
+
+    /**
+     * Changes the logged-in user's password. A wrong current password fails with the server's
+     * {@code wrong_password}; the other devices are logged out, this one stays.
+     */
+    public void changePassword(String currentPassword, String newPassword) throws IOException {
+        send(request("/api/v1/users/me/password")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("currentPassword", currentPassword, "newPassword", newPassword)))
+                .build());
+    }
+
+    /** The devices logged into the account, most recently used first. */
+    public List<DeviceSession> listSessions() throws IOException {
+        return List.of(readJson(send(get("/api/v1/auth/sessions")), DeviceSession[].class));
+    }
+
+    /** Logs a device out, for example a lost phone. */
+    public void endSession(UUID sessionId) throws IOException {
+        send(request("/api/v1/auth/sessions/" + sessionId).DELETE().build());
+    }
+
+    /** Sets a new password for someone who forgot theirs; all their sessions end. Administrators only. */
+    public void resetPassword(UUID userId, String newPassword) throws IOException {
+        send(request("/api/v1/admin/users/" + userId + "/password")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("newPassword", newPassword)))
+                .build());
+    }
+
+    /**
+     * Makes an account an administrator or a member, or disables or enables it; null leaves that
+     * as it is. Administrators only, and not for their own account.
+     */
+    public User updateUser(UUID userId, Boolean admin, Boolean disabled) throws IOException {
+        Map<String, Object> changes = new HashMap<>();
+        if (admin != null) {
+            changes.put("admin", admin);
+        }
+        if (disabled != null) {
+            changes.put("disabled", disabled);
+        }
+        HttpRequest request = request("/api/v1/admin/users/" + userId)
+                .header("Content-Type", "application/json")
+                .method("PATCH", jsonBody(changes))
+                .build();
+        return readJson(send(request), User.class);
+    }
+
+    /** The copies of the catalog database, newest first. Administrators only. */
+    public List<Backup> listBackups() throws IOException {
+        return List.of(readJson(send(get("/api/v1/admin/backups")), Backup[].class));
+    }
+
+    /** Makes a copy of the catalog database now. Administrators only. */
+    public Backup createBackup() throws IOException {
+        return readJson(send(request("/api/v1/admin/backups").POST(HttpRequest.BodyPublishers.noBody()).build()),
+                Backup.class);
+    }
+
+    /** Saves a copy of the catalog database at {@code target}, to keep it somewhere else. */
+    public void downloadBackup(String name, Path target) throws IOException {
+        download("/api/v1/admin/backups/" + URLEncoder.encode(name, StandardCharsets.UTF_8), target);
     }
 
     /**

@@ -18,11 +18,25 @@ public final class Models {
     public record ServerInfo(String name, String version, boolean setupRequired) {
     }
 
-    public record User(UUID id, String email, String displayName, String role, Instant createdAt) {
+    /** @param disabled a disabled account cannot log in */
+    public record User(UUID id, String email, String displayName, String role, Instant createdAt, boolean disabled) {
 
         public boolean isAdmin() {
             return "ADMIN".equals(role);
         }
+    }
+
+    /**
+     * A device logged into the account ({@code GET /api/v1/auth/sessions}).
+     *
+     * @param current whether it is the session making the request, this app
+     */
+    public record DeviceSession(UUID id, String deviceName, Instant createdAt, Instant lastUsedAt, Instant expiresAt,
+                                boolean current) {
+    }
+
+    /** A copy of the server's catalog database ({@code /api/v1/admin/backups}). */
+    public record Backup(String name, long sizeBytes, Instant createdAt) {
     }
 
     /**

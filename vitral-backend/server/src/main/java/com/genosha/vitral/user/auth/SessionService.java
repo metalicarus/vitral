@@ -62,6 +62,9 @@ public class SessionService {
             LOG.debugf("Expired session %s removed", session.id);
             return Optional.empty();
         }
+        if (session.user.disabled) {
+            return Optional.empty();
+        }
         if (Duration.between(session.lastUsedAt, now).compareTo(LAST_USED_GRANULARITY) >= 0) {
             session.lastUsedAt = now;
         }

@@ -25,9 +25,11 @@ Aplicativo desktop do [Vitral](../README.md) para navegar pelas fotos guardadas 
   - Os detalhes trazem a data (e de onde ela veio), a câmera, a lente, a exposição (como `f/4 · 1/250 s · ISO 400 · 50 mm`), o local onde a foto foi tirada, as dimensões, o tamanho, o formato e a data do envio. Câmera e local só aparecem quando a foto tem essas informações.
   - **Ver no mapa** abre a posição da foto no OpenStreetMap, no navegador. É o único momento em que o app leva algo para fora do servidor, e só quando você clica.
   - **Baixar original** salva o arquivo original numa pasta escolhida, com o nome com que foi enviado. O app lembra a última pasta usada.
+- **Minha conta:** o botão com o seu nome, no topo da galeria, abre a sua conta: trocar o nome, trocar a senha (os outros aparelhos são desconectados, este continua) e ver os aparelhos conectados, com quando cada um foi usado pela última vez e o botão **Desconectar**, para um celular perdido ou um computador que não é seu.
 - **Administração** (só para administradores, pelo ícone de engrenagem no topo da galeria):
-  - **Usuários:** lista as contas e cria contas novas, de membro ou de administrador.
+  - **Usuários:** lista as contas, com o papel e a situação de cada uma, e cria contas novas, de membro ou de administrador. O menu **⋯** de cada conta redefine a senha de quem esqueceu a sua, torna a conta administradora ou membro, e desativa ou reativa a conta (desativada, ela não entra mais, mas as fotos continuam lá).
   - **Pastas monitoradas:** cadastra uma pasta do servidor para uma conta, como a pasta que o Syncthing mantém sincronizada com o celular. A lista mostra quantas fotos cada pasta tem e quando foi a última varredura, e se atualiza sozinha enquanto está aberta. Dá para pedir uma varredura na hora ou parar de monitorar; o Vitral nunca altera nem apaga os arquivos da pasta.
+  - **Backups:** as cópias do banco que o servidor faz sozinho, com o botão **Fazer backup agora** e **Baixar**, para guardar uma cópia fora do servidor.
 - **Tema claro e escuro:** acompanha o tema do sistema operacional, inclusive se ele mudar com o app aberto. O visualizador é sempre escuro.
 
 ## Stack

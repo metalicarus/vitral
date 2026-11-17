@@ -1,5 +1,6 @@
 package com.genosha.vitral.client.api;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.genosha.vitral.client.api.Models.AssetPage;
 import com.genosha.vitral.client.api.Models.LoginResult;
 import com.sun.net.httpserver.HttpExchange;
@@ -17,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Stream;
 
@@ -29,6 +31,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Runs the client against a small fake server that answers like Vitral's. */
 class VitralApiTest {
+
+    private static final ObjectMapper JSON = new ObjectMapper();
 
     private HttpServer server;
     private VitralApi api;
@@ -404,6 +408,73 @@ class VitralApiTest {
                 "POST /api/v1/albums/A/assets {\"assetIds\":[\"P\"]}",
                 "POST /api/v1/albums/A/assets/remove {\"assetIds\":[\"P\"]}",
                 "DELETE /api/v1/albums/A"), calls);
+    }
+
+    @Test
+    void managesTheAccountSessionsAndBackups(@TempDir Path folder) throws IOException {
+        UUID user = UUID.randomUUID();
+        UUID session = UUID.randomUUID();
+        List<String> calls = new ArrayList<>();
+        String userJson = """
+                {"id":"%s","email":"bia@exemplo.com","displayName":"Bia","role":"USER",
+                 "createdAt":"2026-11-17T10:00:00Z","disabled":true}""".formatted(user);
+        com.sun.net.httpserver.HttpHandler handler = exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String path = exchange.getRequestURI().getPath().replace(user.toString(), "U").replace(session.toString(), "S");
+            // The client builds bodies from maps, so the field order is not fixed.
+            String sorted = body.isEmpty() ? "" : " " + JSON.writeValueAsString(JSON.readValue(body, TreeMap.class));
+            calls.add(exchange.getRequestMethod() + " " + path + sorted);
+            if (path.endsWith("/password") || exchange.getRequestMethod().equals("DELETE")) {
+                exchange.sendResponseHeaders(204, -1);
+                exchange.close();
+            } else if (path.equals("/api/v1/auth/sessions")) {
+                write(exchange, 200, """
+                        [{"id":"%s","deviceName":"Celular","createdAt":"2026-11-01T10:00:00Z",
+                          "lastUsedAt":"2026-11-17T10:00:00Z","expiresAt":"2027-02-01T10:00:00Z","current":false}]"""
+                        .formatted(session));
+            } else if (path.equals("/api/v1/admin/backups") && exchange.getRequestMethod().equals("GET")) {
+                write(exchange, 200, "[{\"name\":\"vitral-2026-11-17T10-00-00Z.db\",\"sizeBytes\":4096,"
+                        + "\"createdAt\":\"2026-11-17T10:00:00Z\"}]");
+            } else if (path.equals("/api/v1/admin/backups")) {
+                write(exchange, 201, "{\"name\":\"vitral-2026-11-17T11-00-00Z.db\",\"sizeBytes\":4096,"
+                        + "\"createdAt\":\"2026-11-17T11:00:00Z\"}");
+            } else if (path.startsWith("/api/v1/admin/backups/")) {
+                byte[] file = "SQLite format 3".getBytes(StandardCharsets.US_ASCII);
+                exchange.sendResponseHeaders(200, file.length);
+                exchange.getResponseBody().write(file);
+                exchange.close();
+            } else {
+                write(exchange, 200, userJson);
+            }
+        };
+        server.createContext("/api/v1/users", handler);
+        server.createContext("/api/v1/auth/sessions", handler);
+        server.createContext("/api/v1/admin", handler);
+
+        api.updateProfile("Bia");
+        api.changePassword("velha-123456", "nova-1234567");
+        List<Models.DeviceSession> sessions = api.listSessions();
+        api.endSession(session);
+        api.resetPassword(user, "redefinida-1");
+        Models.User changed = api.updateUser(user, null, true);
+        List<Models.Backup> backups = api.listBackups();
+        api.createBackup();
+        Path saved = folder.resolve("copia.db");
+        api.downloadBackup(backups.getFirst().name(), saved);
+
+        assertEquals("Celular", sessions.getFirst().deviceName());
+        assertTrue(changed.disabled());
+        assertEquals("SQLite format 3", Files.readString(saved, StandardCharsets.US_ASCII));
+        assertEquals(List.of(
+                "PATCH /api/v1/users/me {\"displayName\":\"Bia\"}",
+                "POST /api/v1/users/me/password {\"currentPassword\":\"velha-123456\",\"newPassword\":\"nova-1234567\"}",
+                "GET /api/v1/auth/sessions",
+                "DELETE /api/v1/auth/sessions/S",
+                "POST /api/v1/admin/users/U/password {\"newPassword\":\"redefinida-1\"}",
+                "PATCH /api/v1/admin/users/U {\"disabled\":true}",
+                "GET /api/v1/admin/backups",
+                "POST /api/v1/admin/backups",
+                "GET /api/v1/admin/backups/vitral-2026-11-17T10-00-00Z.db"), calls);
     }
 
     private static String assetJson(UUID id) {

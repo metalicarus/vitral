@@ -40,6 +40,11 @@ public class StartupReport {
                 config.upload().maxSize().asLongValue() / (1024 * 1024), config.media().workers(),
                 readable(config.imports().scanInterval()), readable(config.imports().settle()),
                 readable(config.trash().retention()));
+        if (config.backup().enabled()) {
+            LOG.infof("Database backups: every %s, keeping the last %d, in %s",
+                    readable(config.backup().interval()), config.backup().keep(),
+                    config.dataDir().resolve("backups").toAbsolutePath().normalize());
+        }
         if (fileLog) {
             LOG.infof("Logs are also written to %s", fileLogPath);
         }
