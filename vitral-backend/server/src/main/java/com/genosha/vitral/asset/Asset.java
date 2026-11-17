@@ -127,6 +127,17 @@ public class Asset extends PanacheEntityBase {
     /** The current version of the metadata reading; see {@link #metadataVersion}. */
     public static final int METADATA_VERSION = 1;
 
+    @Column(nullable = false)
+    public boolean favorite;
+
+    /** Kept out of the timeline, but not deleted: shown only in the archive. */
+    @Column(nullable = false)
+    public boolean archived;
+
+    /** When the photo was moved to the trash, or null when it is not there. */
+    @Column(name = "trashed_at")
+    public Instant trashedAt;
+
     public static Optional<Asset> findByOwnerAndHash(UUID ownerId, String sha256) {
         return find("ownerId = ?1 and sha256 = ?2", ownerId, sha256).firstResultOptional();
     }

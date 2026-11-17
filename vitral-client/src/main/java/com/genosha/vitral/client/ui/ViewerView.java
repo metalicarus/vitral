@@ -6,6 +6,7 @@ import com.genosha.vitral.client.ClientSettings;
 import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.Camera;
+import com.genosha.vitral.client.api.Models.LibraryView;
 import com.genosha.vitral.client.api.Models.Location;
 import com.genosha.vitral.client.api.Models.TakenAtSource;
 import com.genosha.vitral.client.api.Models.ThumbnailStatus;
@@ -16,7 +17,9 @@ import javafx.application.Platform;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Hyperlink;
 import javafx.scene.control.Label;
 import javafx.scene.control.ProgressIndicator;
@@ -38,6 +41,7 @@ import java.io.File;
 import java.nio.file.Path;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -49,7 +53,8 @@ import java.util.concurrent.CompletionException;
  * megabytes; the original is downloaded only when asked. While the preview loads, the
  * thumbnail already in memory is shown enlarged, so something appears at once.
  *
- * <p>Keys: left and right arrows move between photos, I shows the details, Esc closes.
+ * <p>Keys: left and right arrows move between photos, I shows the details, F marks a
+ * favorite, Delete moves to the trash (or, in the trash, deletes for good), Esc closes.
  */
 final class ViewerView extends StackPane {
 
@@ -67,6 +72,15 @@ final class ViewerView extends StackPane {
         void closed(Asset current);
 
         void sessionExpired();
+
+        /** Which view the photos come from; in the trash, the actions are restore and delete. */
+        LibraryView view();
+
+        /** The server changed a photo; the gallery replaces it, or drops it if it left the view. */
+        void changed(Asset updated);
+
+        /** The photo was deleted for good. */
+        void deleted(Asset asset);
     }
 
     /** Asks the gallery for the next page when the viewer gets this close to the last loaded photo. */
@@ -92,12 +106,19 @@ final class ViewerView extends StackPane {
     private final Button next = navigationButton(Feather.CHEVRON_RIGHT, "Próxima (→)");
     private final Button download = new Button("Baixar original", new FontIcon(Feather.DOWNLOAD));
     private final ToggleButton infoToggle = new ToggleButton(null, new FontIcon(Feather.INFO));
+    private final ToggleButton favoriteButton = new ToggleButton(null, new FontIcon(Feather.STAR));
+    private final Button archiveButton = actionButton(Feather.ARCHIVE, "Arquivar");
+    private final Button trashButton = actionButton(Feather.TRASH_2, "Mover para a lixeira (Delete)");
+    private final Button restoreButton = new Button("Restaurar", new FontIcon(Feather.ROTATE_CCW));
+    private final Button deleteButton = new Button("Apagar para sempre", new FontIcon(Feather.TRASH));
     private final VBox info = new VBox(16);
     private final PauseTransition statusTimeout = new PauseTransition(Duration.seconds(6));
     private final PauseTransition previewRetry = new PauseTransition(Duration.seconds(3));
 
     private int index;
     private CompletableFuture<Image> pending;
+    /** An action on the current photo is on its way to the server; another one waits for it. */
+    private boolean busy;
 
     ViewerView(Host host, VitralApi api, ImageLoader thumbnails, ImageLoader previews, ClientSettings settings,
                ZoneId zone, int startIndex) {
@@ -155,7 +176,27 @@ final class ViewerView extends StackPane {
         download.getStyleClass().add(Styles.FLAT);
         download.setOnAction(event -> downloadOriginal());
 
-        HBox bar = new HBox(12, close, names, new Spacer(), status, infoToggle, download);
+        favoriteButton.getStyleClass().addAll(Styles.BUTTON_ICON, Styles.FLAT, "favorite-toggle");
+        favoriteButton.setTooltip(new Tooltip("Favorita (F)"));
+        favoriteButton.setOnAction(event -> toggleFavorite());
+        archiveButton.setOnAction(event -> toggleArchive());
+        trashButton.setOnAction(event -> moveToTrash());
+        restoreButton.getStyleClass().add(Styles.FLAT);
+        restoreButton.setOnAction(event -> restore());
+        deleteButton.getStyleClass().addAll(Styles.FLAT, "viewer-danger");
+        deleteButton.setOnAction(event -> deleteForGood());
+        boolean inTrash = host.view() == LibraryView.TRASH;
+        for (Node node : new Node[]{favoriteButton, archiveButton, trashButton}) {
+            node.setVisible(!inTrash);
+            node.setManaged(!inTrash);
+        }
+        for (Node node : new Node[]{restoreButton, deleteButton}) {
+            node.setVisible(inTrash);
+            node.setManaged(inTrash);
+        }
+
+        HBox bar = new HBox(12, close, names, new Spacer(), status, favoriteButton, archiveButton, trashButton,
+                restoreButton, deleteButton, infoToggle, download);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10, 16, 10, 16));
         bar.getStyleClass().add("viewer-bar");
@@ -191,6 +232,18 @@ final class ViewerView extends StackPane {
             case RIGHT -> step(1);
             case ESCAPE -> close();
             case I -> infoToggle.setSelected(!infoToggle.isSelected());
+            case F -> {
+                if (host.view() != LibraryView.TRASH) {
+                    toggleFavorite();
+                }
+            }
+            case DELETE -> {
+                if (host.view() == LibraryView.TRASH) {
+                    deleteForGood();
+                } else {
+                    moveToTrash();
+                }
+            }
             default -> {
                 return;
             }
@@ -217,6 +270,8 @@ final class ViewerView extends StackPane {
         title.setText(asset.originalFileName());
         subtitle.setText(Formats.dateTime(asset.takenAt(), zone));
         fillInfo(asset);
+        favoriteButton.setSelected(asset.favorite());
+        archiveButton.getTooltip().setText(asset.archived() ? "Tirar do arquivo" : "Arquivar: some da linha do tempo");
         previous.setDisable(index == 0);
         next.setDisable(index == assets.size() - 1 && !host.hasMore());
         if (index >= assets.size() - LOAD_AHEAD) {
@@ -249,7 +304,7 @@ final class ViewerView extends StackPane {
         spinner.setVisible(true);
         pending = previews.load(asset.id());
         pending.whenComplete((image, error) -> Platform.runLater(() -> {
-            if (host.assets().get(index) != asset) {
+            if (!isShowing(asset)) {
                 return;
             }
             spinner.setVisible(false);
@@ -269,7 +324,7 @@ final class ViewerView extends StackPane {
                     showNotice("A prévia desta foto ainda está sendo gerada. Ela aparece aqui assim que ficar pronta.");
                 }
                 previewRetry.setOnFinished(event -> {
-                    if (host.assets().get(index) == asset) {
+                    if (isShowing(asset)) {
                         loadPreview(asset);
                     }
                 });
@@ -278,6 +333,106 @@ final class ViewerView extends StackPane {
                 showNotice(ErrorMessages.describe(cause));
             }
         }));
+    }
+
+    private void toggleFavorite() {
+        Asset asset = current();
+        act(() -> api.updateAsset(asset.id(), !asset.favorite(), null),
+                asset.favorite() ? "Tirada das favoritas" : "Marcada como favorita");
+    }
+
+    private void toggleArchive() {
+        Asset asset = current();
+        act(() -> api.updateAsset(asset.id(), null, !asset.archived()),
+                asset.archived() ? "Tirada do arquivo" : "Foto arquivada: ela continua no Arquivo");
+    }
+
+    private void moveToTrash() {
+        Asset asset = current();
+        act(() -> api.trash(asset.id()), "Foto movida para a lixeira; dá para restaurar por 30 dias");
+    }
+
+    private void restore() {
+        Asset asset = current();
+        act(() -> api.restore(asset.id()), "Foto restaurada");
+    }
+
+    private void deleteForGood() {
+        Asset asset = current();
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Ela sai da biblioteca e não dá para desfazer. Se veio de uma pasta monitorada, o arquivo na pasta"
+                        + " continua lá.", ButtonType.CANCEL, ButtonType.OK);
+        confirm.initOwner(getScene().getWindow());
+        confirm.setTitle("Apagar para sempre");
+        confirm.setHeaderText("Apagar " + asset.originalFileName() + " para sempre?");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK || busy) {
+            requestFocus();
+            return;
+        }
+        busy = true;
+        Background.run(() -> {
+            api.deleteForGood(asset.id());
+            return asset;
+        }, deleted -> {
+            busy = false;
+            host.deleted(deleted);
+            afterListChanged(deleted, "Foto apagada para sempre");
+        }, this::actionFailed);
+        requestFocus();
+    }
+
+    /** Sends a change of the current photo to the server, then updates the gallery and the viewer. */
+    private void act(Callable<Asset> change, String message) {
+        if (busy) {
+            return;
+        }
+        busy = true;
+        Background.run(change, updated -> {
+            busy = false;
+            host.changed(updated);
+            afterListChanged(updated, message);
+        }, this::actionFailed);
+    }
+
+    /**
+     * After the gallery's list changed: shows the same photo again, or the next one if the photo
+     * left the view (archived or trashed from the timeline, restored from the trash), or closes
+     * when nothing is left.
+     */
+    private void afterListChanged(Asset changed, String message) {
+        List<Asset> assets = host.assets();
+        if (assets.isEmpty()) {
+            close(changed);
+            return;
+        }
+        show(Math.min(index, assets.size() - 1));
+        showStatus(message, true);
+    }
+
+    private void actionFailed(Throwable error) {
+        busy = false;
+        if (error instanceof ApiException apiError && apiError.isUnauthorized()) {
+            host.sessionExpired();
+            return;
+        }
+        showStatus(ErrorMessages.describe(error), true);
+    }
+
+    private Asset current() {
+        return host.assets().get(index);
+    }
+
+    /** Whether {@code asset} is still the photo on screen; the list may have changed meanwhile. */
+    private boolean isShowing(Asset asset) {
+        List<Asset> assets = host.assets();
+        return index < assets.size() && assets.get(index) == asset;
+    }
+
+    private static Button actionButton(Feather icon, String tooltip) {
+        Button button = new Button(null, new FontIcon(icon));
+        button.getStyleClass().addAll(Styles.BUTTON_ICON, Styles.FLAT);
+        button.setTooltip(new Tooltip(tooltip));
+        return button;
     }
 
     /** Starts loading a neighbor's preview, so moving to it is instant. */
@@ -396,9 +551,13 @@ final class ViewerView extends StackPane {
     }
 
     private void close() {
+        close(current());
+    }
+
+    private void close(Asset last) {
         cancelPending();
         statusTimeout.stop();
-        host.closed(host.assets().get(index));
+        host.closed(last);
     }
 
     private void cancelPending() {

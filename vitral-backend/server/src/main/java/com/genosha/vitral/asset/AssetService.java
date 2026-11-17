@@ -158,16 +158,18 @@ public class AssetService {
     public static final int MAX_PAGE_SIZE = 500;
 
     /**
-     * The owner's assets, newest first by capture date, with the id breaking ties between
-     * assets taken in the same millisecond. Pass the previous page's cursor to continue.
+     * The owner's assets in one view (timeline, favorites, archive or trash), newest first by
+     * capture date, with the id breaking ties between assets taken in the same millisecond.
+     * Pass the previous page's cursor to continue.
      *
      * <p>Fetches one extra row to learn whether another page exists, instead of counting.
      */
-    public AssetPage list(UUID ownerId, int limit, AssetCursor after) {
+    public AssetPage list(UUID ownerId, AssetFilter filter, int limit, AssetCursor after) {
         Sort newestFirst = Sort.descending("takenAt", "id");
+        String where = "ownerId = ?1 and " + filter.condition();
         PanacheQuery<Asset> query = after == null
-                ? Asset.find("ownerId = ?1", newestFirst, ownerId)
-                : Asset.find("ownerId = ?1 and (takenAt < ?2 or (takenAt = ?2 and id < ?3))", newestFirst,
+                ? Asset.find(where, newestFirst, ownerId)
+                : Asset.find(where + " and (takenAt < ?2 or (takenAt = ?2 and id < ?3))", newestFirst,
                 ownerId, Instant.ofEpochMilli(after.takenAtMillis()), after.id());
         List<Asset> rows = query.page(0, limit + 1).list();
 
@@ -183,7 +185,8 @@ public class AssetService {
 
     /**
      * Tells a backup client which files it still needs to send. Only the user's own assets
-     * count: a photo another user has is still missing for this one.
+     * count: a photo another user has is still missing for this one. Photos in the trash
+     * count as present, so a backup does not bring back what the user deleted.
      */
     public HashCheckResult check(UUID ownerId, List<String> hashes) {
         if (hashes == null) {

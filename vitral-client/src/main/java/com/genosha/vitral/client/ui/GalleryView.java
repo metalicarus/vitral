@@ -8,6 +8,7 @@ import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
 import com.genosha.vitral.client.api.Models.HashCheckResult;
+import com.genosha.vitral.client.api.Models.LibraryView;
 import com.genosha.vitral.client.api.Models.UploadResult;
 import javafx.application.Platform;
 import javafx.collections.ObservableList;
@@ -16,6 +17,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.ListCell;
 import javafx.scene.control.ListView;
@@ -24,11 +26,14 @@ import javafx.scene.control.MenuItem;
 import javafx.scene.control.ProgressBar;
 import javafx.scene.control.ProgressIndicator;
 import javafx.scene.control.TextArea;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.control.ToggleGroup;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.skin.VirtualFlow;
 import javafx.scene.input.TransferMode;
 import javafx.scene.layout.BorderPane;
 import javafx.scene.layout.HBox;
+import javafx.scene.layout.Priority;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.DirectoryChooser;
@@ -84,6 +89,9 @@ public class GalleryView extends StackPane {
     private final List<Asset> assets = new ArrayList<>();
     private String nextCursor;
     private boolean loading;
+    /** Which photos are shown: the timeline, favorites, the archive or the trash. */
+    private LibraryView view = LibraryView.TIMELINE;
+    private final Node trashBanner = trashBanner();
     /** Bumped on every reload, so answers to requests made before it are ignored. */
     private int generation;
     private int columns;
@@ -114,7 +122,8 @@ public class GalleryView extends StackPane {
         showLoadingMore(false);
 
         layout.setTop(header(onLogout));
-        layout.setCenter(content);
+        VBox.setVgrow(content, Priority.ALWAYS);
+        layout.setCenter(new VBox(trashBanner, content));
         layout.setBottom(new VBox(uploadBar, loadingMore));
         getChildren().addAll(layout, dropHint);
         getStyleClass().add("gallery-view");
@@ -341,11 +350,43 @@ public class GalleryView extends StackPane {
         public void sessionExpired() {
             onSessionExpired.run();
         }
+
+        @Override
+        public LibraryView view() {
+            return view;
+        }
+
+        @Override
+        public void changed(Asset updated) {
+            int index = indexOf(updated.id());
+            if (index < 0) {
+                return;
+            }
+            if (view.contains(updated)) {
+                assets.set(index, updated);
+            } else {
+                assets.remove(index);
+            }
+            assetsChanged();
+        }
+
+        @Override
+        public void deleted(Asset asset) {
+            int index = indexOf(asset.id());
+            if (index >= 0) {
+                assets.remove(index);
+                assetsChanged();
+            }
+        }
     }
 
     /** After the viewer closes, scrolls the gallery to the last photo seen there, unless it is already on screen. */
     private void revealRowOf(UUID assetId) {
         int row = rowContaining(list.getItems(), assetId);
+        if (row < 0) {
+            // The photo left this view, for example moved to the trash.
+            return;
+        }
         if (list.lookup(".virtual-flow") instanceof VirtualFlow<?> flow
                 && flow.getFirstVisibleCell() != null && flow.getLastVisibleCell() != null
                 && row > flow.getFirstVisibleCell().getIndex() && row < flow.getLastVisibleCell().getIndex()) {
@@ -388,7 +429,7 @@ public class GalleryView extends StackPane {
         uploadButton.getStyleClass().add(Styles.ACCENT);
         uploadButton.setTooltip(new Tooltip("Também dá para arrastar fotos e pastas para esta janela"));
 
-        HBox header = new HBox(12, brand, new Spacer(), uploadButton, user, refresh);
+        HBox header = new HBox(12, brand, viewSwitcher(), new Spacer(), uploadButton, user, refresh);
         if (session.user().isAdmin()) {
             Button settings = new Button(null, new FontIcon(Feather.SETTINGS));
             settings.getStyleClass().addAll(Styles.BUTTON_ICON, Styles.FLAT);
@@ -429,7 +470,8 @@ public class GalleryView extends StackPane {
         if (cursor != null) {
             showLoadingMore(true);
         }
-        Background.run(() -> session.api().listAssets(PAGE_SIZE, cursor), page -> {
+        LibraryView requestView = view;
+        Background.run(() -> session.api().listAssets(requestView, PAGE_SIZE, cursor), page -> {
             if (requestGeneration == generation) {
                 pageLoaded(page);
             }
@@ -533,7 +575,7 @@ public class GalleryView extends StackPane {
                 return i;
             }
         }
-        return 0;
+        return -1;
     }
 
     private void showLoadingMore(boolean visible) {
@@ -542,9 +584,109 @@ public class GalleryView extends StackPane {
     }
 
     private Node emptyState() {
-        return centeredState(Feather.IMAGE, "Nenhuma foto ainda",
-                "Use “Enviar fotos” ou arraste fotos e pastas para esta janela. Elas aparecem aqui,"
-                        + " da mais recente para a mais antiga.", null);
+        return switch (view) {
+            case TIMELINE -> centeredState(Feather.IMAGE, "Nenhuma foto ainda",
+                    "Use “Enviar fotos” ou arraste fotos e pastas para esta janela. Elas aparecem aqui,"
+                            + " da mais recente para a mais antiga.", null);
+            case FAVORITES -> centeredState(Feather.STAR, "Nenhuma favorita ainda",
+                    "Abra uma foto e marque a estrela, ou aperte F, para ela aparecer aqui.", null);
+            case ARCHIVE -> centeredState(Feather.ARCHIVE, "Nada no arquivo",
+                    "Arquive pelo visualizador as fotos que você quer guardar sem ver na linha do tempo, como prints"
+                            + " e documentos.", null);
+            case TRASH -> centeredState(Feather.TRASH_2, "A lixeira está vazia",
+                    "Fotos apagadas ficam aqui por 30 dias antes de sair de vez.", null);
+        };
+    }
+
+    /** Pills to switch between the timeline, favorites, the archive and the trash. */
+    private Node viewSwitcher() {
+        LibraryView[] views = LibraryView.values();
+        String[] names = {"Fotos", "Favoritas", "Arquivo", "Lixeira"};
+        Feather[] icons = {Feather.IMAGE, Feather.STAR, Feather.ARCHIVE, Feather.TRASH_2};
+        ToggleGroup group = new ToggleGroup();
+        HBox pills = new HBox();
+        for (int i = 0; i < views.length; i++) {
+            ToggleButton pill = new ToggleButton(names[i], new FontIcon(icons[i]));
+            pill.setToggleGroup(group);
+            pill.setUserData(views[i]);
+            pill.setSelected(views[i] == view);
+            pill.setFocusTraversable(false);
+            pill.getStyleClass().add(i == 0 ? Styles.LEFT_PILL : i == views.length - 1 ? Styles.RIGHT_PILL
+                    : Styles.CENTER_PILL);
+            pills.getChildren().add(pill);
+        }
+        group.selectedToggleProperty().addListener((obs, old, selected) -> {
+            if (selected == null) {
+                // Clicking the selected pill again would leave none selected.
+                old.setSelected(true);
+            } else {
+                showView((LibraryView) selected.getUserData());
+            }
+        });
+        return pills;
+    }
+
+    private void showView(LibraryView newView) {
+        if (newView == view) {
+            return;
+        }
+        view = newView;
+        trashBanner.setVisible(view == LibraryView.TRASH);
+        trashBanner.setManaged(view == LibraryView.TRASH);
+        reload();
+    }
+
+    /** Shown above the trash: how long photos stay, and a way to empty it. */
+    private Node trashBanner() {
+        Label text = new Label("Fotos na lixeira são apagadas para sempre 30 dias depois de chegarem aqui.",
+                new FontIcon(Feather.INFO));
+        text.setWrapText(true);
+        Button empty = new Button("Esvaziar lixeira", new FontIcon(Feather.TRASH));
+        empty.getStyleClass().addAll(Styles.DANGER, Styles.FLAT);
+        empty.setOnAction(event -> emptyTrash());
+        HBox banner = new HBox(12, text, new Spacer(), empty);
+        banner.setAlignment(Pos.CENTER_LEFT);
+        banner.setPadding(new Insets(8, SIDE_PADDING, 8, SIDE_PADDING));
+        banner.getStyleClass().add("trash-banner");
+        banner.setVisible(false);
+        banner.setManaged(false);
+        return banner;
+    }
+
+    private void emptyTrash() {
+        Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                "Todas as fotos da lixeira saem da biblioteca e não dá para desfazer. Arquivos de pastas monitoradas"
+                        + " continuam nas pastas.", ButtonType.CANCEL, ButtonType.OK);
+        confirm.initOwner(getScene().getWindow());
+        confirm.setTitle("Esvaziar lixeira");
+        confirm.setHeaderText("Apagar para sempre tudo o que está na lixeira?");
+        if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+            return;
+        }
+        Background.run(session.api()::emptyTrash, deleted -> reload(), error -> {
+            if (error instanceof ApiException api && api.isUnauthorized()) {
+                onSessionExpired.run();
+                return;
+            }
+            Alert failure = new Alert(Alert.AlertType.ERROR, ErrorMessages.describe(error));
+            failure.initOwner(getScene().getWindow());
+            failure.setHeaderText("Não foi possível esvaziar a lixeira");
+            failure.showAndWait();
+        });
+    }
+
+    /** After a photo changed or was deleted: shows the new list, or the empty state when nothing is left. */
+    private void assetsChanged() {
+        if (assets.isEmpty()) {
+            list.getItems().clear();
+            if (nextCursor != null) {
+                loadMore();
+            } else {
+                content.getChildren().setAll(emptyState());
+            }
+            return;
+        }
+        relayout(false);
     }
 
     private Node errorState(String message) {

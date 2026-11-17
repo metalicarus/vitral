@@ -31,6 +31,14 @@ public interface VitralConfig {
 
     Media media();
 
+    Trash trash();
+
+    interface Trash {
+        /** How long a photo stays in the trash, where it can be restored, before it is deleted for good. */
+        @WithDefault("P30D")
+        Duration retention();
+    }
+
     /** Watched folders. Named {@code imports} because {@code import} is a Java keyword. */
     @WithName("import")
     Import imports();
