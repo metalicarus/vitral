@@ -3,18 +3,26 @@ package com.genosha.vitral.client.ui;
 import atlantafx.base.controls.Message;
 import atlantafx.base.controls.PasswordTextField;
 import atlantafx.base.theme.Styles;
+import atlantafx.base.theme.Tweaks;
 import com.genosha.vitral.client.api.Models.User;
 import com.genosha.vitral.client.api.VitralApi;
+import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
+import javafx.scene.control.MenuButton;
+import javafx.scene.control.MenuItem;
+import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.TextField;
+import javafx.scene.control.TextInputDialog;
 import javafx.scene.layout.GridPane;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.Priority;
@@ -23,10 +31,15 @@ import org.kordamp.ikonli.feather.Feather;
 import org.kordamp.ikonli.javafx.FontIcon;
 
 import java.time.ZoneId;
+import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.function.Consumer;
 import java.util.function.Function;
 
-/** The server's accounts, and a form to create one for each person in the family. */
+/**
+ * The server's accounts, and a form to create one for each person in the family. Each account
+ * other than one's own has a menu to reset its password, change its role, or disable it.
+ */
 final class UsersPane extends VBox {
 
     private static final int MIN_PASSWORD = 8;
@@ -34,6 +47,7 @@ final class UsersPane extends VBox {
     private final VitralApi api;
     private final Consumer<Throwable> onError;
     private final Runnable onUsersChanged;
+    private final UUID me;
     private final ZoneId zone = ZoneId.systemDefault();
 
     private final TableView<User> table = new TableView<>();
@@ -44,17 +58,23 @@ final class UsersPane extends VBox {
     private final Button create = new Button("Criar conta", new FontIcon(Feather.USER_PLUS));
     private final VBox messages = new VBox();
 
-    /** @param onUsersChanged called after an account is created, so other screens can refresh their lists */
-    UsersPane(VitralApi api, Consumer<Throwable> onError, Runnable onUsersChanged) {
+    /**
+     * @param me             the administrator using the app, whose own account has no menu
+     * @param onUsersChanged called after an account is created, so other screens can refresh their lists
+     */
+    UsersPane(VitralApi api, UUID me, Consumer<Throwable> onError, Runnable onUsersChanged) {
         this.api = api;
+        this.me = me;
         this.onError = onError;
         this.onUsersChanged = onUsersChanged;
 
         table.getColumns().add(column("Nome", User::displayName));
         table.getColumns().add(column("E-mail", User::email));
         table.getColumns().add(column("Papel", user -> user.isAdmin() ? "Administrador" : "Membro"));
+        table.getColumns().add(column("Situação", user -> user.disabled() ? "Desativada" : "Ativa"));
         table.getColumns().add(column("Criada em",
                 user -> user.createdAt() == null ? "" : Formats.dateTime(user.createdAt(), zone)));
+        table.getColumns().add(actionsColumn());
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY_FLEX_LAST_COLUMN);
         table.setPlaceholder(new Label("Carregando…"));
         table.getStyleClass().add(Styles.STRIPED);
@@ -125,6 +145,85 @@ final class UsersPane extends VBox {
             onUsersChanged.run();
         }, error -> {
             create.setDisable(false);
+            show(ErrorMessages.describe(error), false);
+            onError.accept(error);
+        });
+    }
+
+    /** A menu per account: reset the password, change the role, disable or enable. */
+    private TableColumn<User, User> actionsColumn() {
+        TableColumn<User, User> column = new TableColumn<>();
+        column.setCellValueFactory(cell -> new ReadOnlyObjectWrapper<>(cell.getValue()));
+        column.setSortable(false);
+        column.setMinWidth(70);
+        column.setMaxWidth(70);
+        column.setCellFactory(col -> new TableCell<>() {
+            @Override
+            protected void updateItem(User user, boolean empty) {
+                super.updateItem(user, empty);
+                if (empty || user == null || user.id().equals(me)) {
+                    setGraphic(null);
+                    return;
+                }
+                MenuItem reset = new MenuItem("Redefinir senha…", new FontIcon(Feather.KEY));
+                reset.setOnAction(event -> resetPassword(user));
+                MenuItem role = new MenuItem(user.isAdmin() ? "Tornar membro" : "Tornar administrador",
+                        new FontIcon(Feather.SHIELD));
+                role.setOnAction(event -> apply(user, () -> api.updateUser(user.id(), !user.isAdmin(), null),
+                        user.displayName() + (user.isAdmin() ? " agora é membro." : " agora é administrador.")));
+                MenuItem toggle = new MenuItem(user.disabled() ? "Reativar conta" : "Desativar conta",
+                        new FontIcon(user.disabled() ? Feather.USER_CHECK : Feather.USER_X));
+                toggle.setOnAction(event -> toggleDisabled(user));
+                MenuButton menu = new MenuButton(null, new FontIcon(Feather.MORE_HORIZONTAL), reset, role, toggle);
+                menu.getStyleClass().addAll(Styles.FLAT, Tweaks.NO_ARROW);
+                setGraphic(menu);
+            }
+        });
+        return column;
+    }
+
+    private void resetPassword(User user) {
+        TextInputDialog dialog = new TextInputDialog();
+        dialog.initOwner(getScene().getWindow());
+        dialog.setTitle("Redefinir senha");
+        dialog.setHeaderText("Nova senha para " + user.displayName() + " (" + user.email() + ")");
+        dialog.setContentText("Senha nova:");
+        dialog.showAndWait().ifPresent(newPassword -> {
+            if (newPassword.length() < MIN_PASSWORD) {
+                show("A senha precisa ter pelo menos " + MIN_PASSWORD + " caracteres.", false);
+                return;
+            }
+            apply(user, () -> {
+                api.resetPassword(user.id(), newPassword);
+                return user;
+            }, "Senha de " + user.displayName() + " redefinida; os aparelhos da conta foram desconectados."
+                    + " Passe a senha nova para a pessoa.");
+        });
+    }
+
+    private void toggleDisabled(User user) {
+        if (!user.disabled()) {
+            Alert confirm = new Alert(Alert.AlertType.CONFIRMATION,
+                    "A pessoa não consegue mais entrar e os aparelhos dela são desconectados. As fotos e os álbuns"
+                            + " continuam guardados, e dá para reativar a conta quando quiser.",
+                    ButtonType.CANCEL, ButtonType.OK);
+            confirm.initOwner(getScene().getWindow());
+            confirm.setTitle("Desativar conta");
+            confirm.setHeaderText("Desativar a conta de " + user.displayName() + "?");
+            if (confirm.showAndWait().orElse(ButtonType.CANCEL) != ButtonType.OK) {
+                return;
+            }
+        }
+        apply(user, () -> api.updateUser(user.id(), null, !user.disabled()),
+                "Conta de " + user.displayName() + (user.disabled() ? " reativada." : " desativada."));
+    }
+
+    private void apply(User user, Callable<User> change, String success) {
+        Background.run(change, updated -> {
+            show(success, true);
+            reload();
+            onUsersChanged.run();
+        }, error -> {
             show(ErrorMessages.describe(error), false);
             onError.accept(error);
         });

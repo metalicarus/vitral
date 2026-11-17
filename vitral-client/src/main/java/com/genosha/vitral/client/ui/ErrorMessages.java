@@ -42,6 +42,13 @@ public final class ErrorMessages {
             case "folder_overlaps_data" -> "A pasta não pode ficar dentro da pasta de dados do Vitral, nem contê-la.";
             case "folder_overlaps" -> "Essa pasta já é monitorada, ou fica dentro de outra pasta monitorada, ou contém uma.";
             case "owner_not_found" -> "Não existe uma conta com esse e-mail.";
+            case "wrong_password" -> "A senha atual está errada.";
+            case "invalid_password" -> "A senha precisa ter de 8 a 256 caracteres.";
+            case "invalid_name" -> "O nome precisa ter de 1 a 100 caracteres.";
+            case "account_disabled" -> "Esta conta está desativada. Fale com um administrador.";
+            case "cannot_change_self" -> "Você não pode mudar o papel nem desativar a sua própria conta.";
+            case "user_not_found" -> "Essa conta não existe mais.";
+            case "backup_not_found" -> "Essa cópia do banco não existe mais.";
             default -> {
                 if (error.isUnauthorized()) {
                     yield "Sua sessão expirou. Entre de novo.";

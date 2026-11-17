@@ -51,6 +51,11 @@ public class AuthService {
             throw ApiException.unauthorized("invalid_credentials", "E-mail or password is incorrect.");
         }
         throttle.reset(key);
+        if (user.get().disabled) {
+            // Told only after a correct password, so this reveals nothing to someone guessing.
+            LOG.warnf("Login refused for %s: the account is disabled", key);
+            throw ApiException.forbidden("account_disabled", "This account is disabled. Ask an administrator.");
+        }
         LOG.infof("%s logged in%s", key, deviceName == null || deviceName.isBlank() ? "" : " from " + deviceName.strip());
         return issue(user.get(), deviceName);
     }

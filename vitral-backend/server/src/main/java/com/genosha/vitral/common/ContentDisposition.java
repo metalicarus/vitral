@@ -18,8 +18,17 @@ public final class ContentDisposition {
 
     /** Tells browsers to show the file, while still offering its name when saving it. */
     public static String inline(String fileName) {
+        return header("inline", fileName);
+    }
+
+    /** Tells browsers to save the file under its name instead of showing it. */
+    public static String attachment(String fileName) {
+        return header("attachment", fileName);
+    }
+
+    private static String header(String type, String fileName) {
         String name = fileName == null || fileName.isBlank() ? "file" : fileName;
-        return "inline; filename=\"" + asciiFallback(name) + "\"; filename*=UTF-8''" + percentEncode(name);
+        return type + "; filename=\"" + asciiFallback(name) + "\"; filename*=UTF-8''" + percentEncode(name);
     }
 
     static String asciiFallback(String name) {

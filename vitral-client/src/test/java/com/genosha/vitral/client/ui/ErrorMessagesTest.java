@@ -18,6 +18,14 @@ class ErrorMessagesTest {
     }
 
     @Test
+    void accountErrorsAreExplained() {
+        assertEquals("A senha atual está errada.",
+                ErrorMessages.describe(new ApiException(400, "wrong_password", "The current password is wrong.")));
+        assertEquals("Esta conta está desativada. Fale com um administrador.",
+                ErrorMessages.describe(new ApiException(403, "account_disabled", "This account is disabled.")));
+    }
+
+    @Test
     void folderNotFoundDependsOnTheStatus() {
         // The server uses the same code for a missing path and for an unknown watched folder.
         assertEquals("Não existe uma pasta nesse caminho no servidor.",

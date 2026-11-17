@@ -16,6 +16,7 @@ final class Formats {
 
     private static final DateTimeFormatter MONTH = DateTimeFormatter.ofPattern("MMMM 'de' yyyy", PT_BR);
     private static final DateTimeFormatter DATE_TIME = DateTimeFormatter.ofPattern("d 'de' MMMM 'de' yyyy, HH:mm", PT_BR);
+    private static final DateTimeFormatter SHORT_DATE_TIME = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm", PT_BR);
     private static final String[] UNITS = {"bytes", "KB", "MB", "GB", "TB"};
 
     private Formats() {
@@ -29,6 +30,11 @@ final class Formats {
     /** {@code 14 de julho de 2024, 16:32}, in {@code zone}. */
     static String dateTime(Instant instant, ZoneId zone) {
         return DATE_TIME.format(instant.atZone(zone));
+    }
+
+    /** {@code 14/07/2024 16:32}, in {@code zone}: for table columns. */
+    static String shortDateTime(Instant instant, ZoneId zone) {
+        return SHORT_DATE_TIME.format(instant.atZone(zone));
     }
 
     /** {@code 3,2 MB}: one decimal place from KB up, counting 1 KB as 1024 bytes. */

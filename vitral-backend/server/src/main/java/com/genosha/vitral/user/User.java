@@ -44,6 +44,10 @@ public class User extends PanacheEntityBase {
     @Column(name = "created_at", nullable = false)
     public Instant createdAt;
 
+    /** A disabled account cannot log in; its photos and albums stay, ready if it is enabled again. */
+    @Column(nullable = false)
+    public boolean disabled;
+
     public static Optional<User> findByEmail(String email) {
         return find("email", normalizeEmail(email)).firstResultOptional();
     }

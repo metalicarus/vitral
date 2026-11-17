@@ -33,6 +33,22 @@ public interface VitralConfig {
 
     Trash trash();
 
+    Backup backup();
+
+    interface Backup {
+        /** Whether the database is copied automatically; backups can still be made on demand when off. */
+        @WithDefault("true")
+        boolean enabled();
+
+        /** How old the newest copy may get before a new one is made. */
+        @WithDefault("P1D")
+        Duration interval();
+
+        /** How many copies are kept; older ones are deleted. */
+        @WithDefault("7")
+        int keep();
+    }
+
     interface Trash {
         /** How long a photo stays in the trash, where it can be restored, before it is deleted for good. */
         @WithDefault("P30D")

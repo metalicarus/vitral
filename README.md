@@ -60,7 +60,12 @@ nunca apaga as fotos; uma foto na lixeira some dos álbuns e volta se for restau
 ### Para a família toda
 
 Num servidor novo, a própria tela de login cria a conta de administrador. Depois, a área de
-administração cria as contas da família e cadastra as pastas monitoradas, sem nenhum comando.
+administração cria as contas da família, redefine a senha de quem esqueceu, desativa contas e cadastra
+as pastas monitoradas, sem nenhum comando. Cada pessoa troca o próprio nome e a senha em **Minha conta**
+e vê os aparelhos conectados, podendo desconectar um celular perdido.
+
+O servidor também copia o banco sozinho todo dia e guarda as últimas cópias, que o administrador pode
+baixar para guardar em outro lugar.
 
 | Entrar no servidor | Administração |
 | --- | --- |
@@ -109,7 +114,7 @@ a configuração, os logs, o Docker e a API; o [do client](vitral-client/README.
 
 **Já feito:** contas e sessões, upload com deduplicação, miniaturas e prévias, metadados completos
 (câmera, lente, exposição e GPS), pastas monitoradas, favoritos, arquivo e lixeira, álbuns, logs
-detalhados no servidor, e o client desktop com tudo isso.
+detalhados no servidor, gestão de contas e backup automático do banco, e o client desktop com tudo isso.
 
 **Próximos passos:**
 - Compartilhamento de álbuns entre as contas da família
