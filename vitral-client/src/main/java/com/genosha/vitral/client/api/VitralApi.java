@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import com.genosha.vitral.client.api.Models.Album;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.AssetPage;
 import com.genosha.vitral.client.api.Models.EmptyTrashResult;
@@ -13,6 +14,7 @@ import com.genosha.vitral.client.api.Models.Folder;
 import com.genosha.vitral.client.api.Models.HashCheckResult;
 import com.genosha.vitral.client.api.Models.LibraryView;
 import com.genosha.vitral.client.api.Models.LoginResult;
+import com.genosha.vitral.client.api.Models.PhotosChanged;
 import com.genosha.vitral.client.api.Models.ServerInfo;
 import com.genosha.vitral.client.api.Models.UploadResult;
 import com.genosha.vitral.client.api.Models.User;
@@ -287,6 +289,75 @@ public final class VitralApi {
 
     /** Either the downloaded file or, when the server refused, its error body. */
     private record Download(Path file, byte[] error) {
+    }
+
+    /**
+     * The user's albums, most recently changed first.
+     *
+     * @param containing a photo; each album then says whether it has it. May be null.
+     */
+    public List<Album> listAlbums(UUID containing) throws IOException {
+        String query = containing == null ? "" : "?containing=" + containing;
+        return List.of(readJson(send(get("/api/v1/albums" + query)), Album[].class));
+    }
+
+    public Album getAlbum(UUID albumId) throws IOException {
+        return readJson(send(get("/api/v1/albums/" + albumId)), Album.class);
+    }
+
+    public Album createAlbum(String name) throws IOException {
+        HttpRequest request = request("/api/v1/albums")
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("name", name)))
+                .build();
+        return readJson(send(request), Album.class);
+    }
+
+    public Album renameAlbum(UUID albumId, String name) throws IOException {
+        return changeAlbum(albumId, Map.of("name", name));
+    }
+
+    /** Makes one of the album's photos its cover. */
+    public Album setAlbumCover(UUID albumId, UUID assetId) throws IOException {
+        return changeAlbum(albumId, Map.of("coverAssetId", assetId));
+    }
+
+    private Album changeAlbum(UUID albumId, Map<String, Object> changes) throws IOException {
+        HttpRequest request = request("/api/v1/albums/" + albumId)
+                .header("Content-Type", "application/json")
+                .method("PATCH", jsonBody(changes))
+                .build();
+        return readJson(send(request), Album.class);
+    }
+
+    /** Deletes the album; its photos stay in the library. */
+    public void deleteAlbum(UUID albumId) throws IOException {
+        send(request("/api/v1/albums/" + albumId).DELETE().build());
+    }
+
+    /** One page of the album's photos, newest first, like {@link #listAssets(LibraryView, int, String)}. */
+    public AssetPage albumPhotos(UUID albumId, int limit, String cursor) throws IOException {
+        String query = "?limit=" + limit
+                + (cursor == null ? "" : "&cursor=" + URLEncoder.encode(cursor, StandardCharsets.UTF_8));
+        return readJson(send(get("/api/v1/albums/" + albumId + "/assets" + query)), AssetPage.class);
+    }
+
+    /** Puts photos in the album; returns how many were not there yet. */
+    public int addToAlbum(UUID albumId, List<UUID> assetIds) throws IOException {
+        return changePhotos("/api/v1/albums/" + albumId + "/assets", assetIds);
+    }
+
+    /** Takes photos out of the album; they stay in the library. */
+    public int removeFromAlbum(UUID albumId, List<UUID> assetIds) throws IOException {
+        return changePhotos("/api/v1/albums/" + albumId + "/assets/remove", assetIds);
+    }
+
+    private int changePhotos(String path, List<UUID> assetIds) throws IOException {
+        HttpRequest request = request(path)
+                .header("Content-Type", "application/json")
+                .POST(jsonBody(Map.of("assetIds", assetIds)))
+                .build();
+        return readJson(send(request), PhotosChanged.class).changed();
     }
 
     /** Largest number of hashes the server accepts in one {@link #check}. */

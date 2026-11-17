@@ -95,6 +95,21 @@ public final class Models {
         }
     }
 
+    /**
+     * An album ({@code /api/v1/albums}).
+     *
+     * @param coverAssetId the photo to show as its cover, or null when it is empty
+     * @param photos       how many photos it has, not counting those in the trash
+     * @param contains     whether it has the photo asked about with {@code containing}; null otherwise
+     */
+    public record Album(UUID id, String name, UUID coverAssetId, long photos, Instant createdAt, Instant updatedAt,
+                        Boolean contains) {
+    }
+
+    /** How many photos a request added to or removed from an album. */
+    public record PhotosChanged(int changed) {
+    }
+
     /** {@code POST /api/v1/assets/trash/empty}. */
     public record EmptyTrashResult(int deleted) {
     }

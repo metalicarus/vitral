@@ -113,7 +113,7 @@ A contrapartida é que qualquer mudança nos bytes gera outro código. Uma foto 
 | Tarefas em segundo plano | Fila própria no servidor, com o status de cada tarefa no SQLite (ADR 0003) |
 | Metadados | metadata-extractor, com ExifTool para casos difíceis |
 | Imagens | libvips (com libheif para HEIC), chamado como processo externo |
-| Vídeo | FFmpeg, chamado como processo externo |
+| Vídeo | FFmpeg, chamado como processo externo *(adiado, veja a ADR 0005)* |
 | Interface web | SvelteKit, em [`vitral-frontend/`](../README.md) (planejado) |
 | Build | Maven |
 | Implantação | Docker Compose, imagens para amd64 e arm64 |
@@ -134,7 +134,7 @@ vitral-backend/
 │       ├── media/             # Formatos, metadados e, no M1, miniaturas e vídeo
 │       ├── storage/           # A biblioteca em disco
 │       ├── timeline/          # (M2) Linha do tempo e busca
-│       └── album/             # (M2) Álbuns e compartilhamento
+│       └── album/             # Álbuns (depois: compartilhamento)
 ├── docs/adr/                  # Registros de decisões de arquitetura
 ├── docker/                    # Dockerfile
 ├── docker-compose.yml
@@ -156,7 +156,7 @@ A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que
 **M1 · Ingestão**
 - [x] Catálogo de fotos: upload, verificação de hashes, listagem, consulta e download do original
 - [x] Miniaturas e prévias em JPEG, geradas em segundo plano
-- [ ] Processamento de vídeo
+- [ ] Processamento de vídeo *(adiado de propósito: depende do FFmpeg; veja a [ADR 0005](docs/adr/0005-videos-adiados.md))*
 - [x] Pastas monitoradas e importação de pastas existentes
 - [x] Metadados: câmera, lente, exposição e posição GPS (fotos antigas são relidas sozinhas)
 - [ ] Cidade a partir da posição GPS, com uma base offline *(v1.1)*
@@ -165,7 +165,7 @@ A v1 do servidor reúne os itens até o M2, exceto os marcados com *(v1.1)*, que
 **M2 · Interface web (fecha a primeira metade)**
 - [ ] Linha do tempo e visualizador
 - [x] Favoritos, arquivo e lixeira (fotos apagadas ficam 30 dias na lixeira)
-- [ ] Álbuns
+- [x] Álbuns, com capa escolhida (fotos na lixeira ficam escondidas até serem restauradas)
 - [ ] Compartilhamento por usuário e por link
 - [ ] Mapa e busca por metadados *(v1.1)*
 - [ ] Importação do Google Takeout *(v1.1)*
@@ -266,6 +266,47 @@ curl -X POST http://localhost:8080/api/v1/assets/trash/empty -H 'Authorization: 
 
 Fotos na lixeira saem da linha do tempo e são apagadas para sempre depois de 30 dias. Ao sair da lixeira para sempre, uma foto enviada tem o original apagado da biblioteca. Uma foto de pasta monitorada só sai do catálogo: o Vitral nunca apaga nada nessas pastas. Para o backup, uma foto na lixeira continua contando como já enviada, para um backup não trazer de volta o que você apagou.
 
+### Álbuns
+
+```bash
+# Cria um álbum
+curl -X POST http://localhost:8080/api/v1/albums -H 'Authorization: Bearer SEU_TOKEN' \
+  -H 'Content-Type: application/json' -d '{"name":"Viagem a Paraty"}'
+
+# Põe fotos no álbum (e tira, com /assets/remove)
+curl -X POST http://localhost:8080/api/v1/albums/ID_DO_ALBUM/assets -H 'Authorization: Bearer SEU_TOKEN' \
+  -H 'Content-Type: application/json' -d '{"assetIds":["ID_DA_FOTO"]}'
+
+# Lista os álbuns (com ?containing=ID_DA_FOTO, cada um diz se tem a foto) e as fotos de um álbum
+curl http://localhost:8080/api/v1/albums -H 'Authorization: Bearer SEU_TOKEN'
+curl http://localhost:8080/api/v1/albums/ID_DO_ALBUM/assets -H 'Authorization: Bearer SEU_TOKEN'
+
+# Renomeia ou escolhe a capa, e apaga o álbum (as fotos ficam na biblioteca)
+curl -X PATCH http://localhost:8080/api/v1/albums/ID_DO_ALBUM -H 'Authorization: Bearer SEU_TOKEN' \
+  -H 'Content-Type: application/json' -d '{"coverAssetId":"ID_DA_FOTO"}'
+curl -X DELETE http://localhost:8080/api/v1/albums/ID_DO_ALBUM -H 'Authorization: Bearer SEU_TOKEN'
+```
+
+Uma foto pode estar em vários álbuns. Na lixeira, ela some dos álbuns e volta se for restaurada; apagada para sempre, sai de todos. Sem uma capa escolhida, a foto mais recente do álbum é a capa.
+
+### Logs
+
+O servidor registra cada evento importante, com o e-mail de quem fez em cada linha de um pedido autenticado:
+
+- **Na inicialização:** a versão, a pasta de dados, o fuso e a configuração em uso.
+- **Cada pedido HTTP:** endereço do cliente, rota, status, tamanho e tempo de resposta.
+- **Acesso:** logins (e tentativas com senha errada, como aviso), bloqueios por tentativas, setup, contas criadas e sessões encerradas.
+- **Fotos:** uploads, idas e voltas da lixeira, exclusões definitivas e a limpeza automática da lixeira.
+- **Pastas e álbuns:** pastas cadastradas e removidas, resumo de cada varredura, álbuns criados, renomeados e apagados, fotos adicionadas e tiradas.
+- **Em `DEBUG`:** cada miniatura gerada (com o tempo), cada arquivo das varreduras, cada mudança percebida nas pastas e as respostas de erro da API.
+
+Senhas e tokens nunca aparecem nos logs. Além do console, os logs vão para `<pasta de dados>/logs/vitral.log`, com rotação a cada 10 MB e as 10 últimas versões guardadas. Para mais detalhe, rode com `VITRAL_LOG_LEVEL=DEBUG`.
+
+```
+2026-11-17 15:55:08,321 INFO  [c.g.v.a.AssetService] (executor-thread-1) ana@exemplo.com Uploaded IMG_1234.HEIC as asset 3f2c… (image/heic, 2481152 bytes, dated 2026-07-14T19:32:10Z by EXIF)
+2026-11-17 15:55:08,335 INFO  [i.q.h.access-log] (executor-thread-1)  192.168.0.20 "POST /api/v1/assets HTTP/1.1" 201 442 31 ms
+```
+
 ### Pastas monitoradas
 
 Uma pasta monitorada é uma pasta do servidor cujas fotos entram na biblioteca de um usuário sem serem enviadas: por exemplo, a pasta que o Syncthing mantém sincronizada com o celular. O Vitral cataloga as fotos onde elas estão e **só lê** a pasta: nunca cria, altera, move nem apaga um arquivo nela, então a sincronização continua funcionando normalmente.
@@ -310,6 +351,8 @@ A pasta não pode estar dentro da pasta de dados do Vitral nem conter essa pasta
 | `VITRAL_IMPORT_SCAN_INTERVAL` | `PT15M` | De quanto em quanto tempo cada pasta monitorada é varrida por inteiro, além das mudanças percebidas na hora |
 | `VITRAL_IMPORT_SETTLE` | `PT5S` | Quanto tempo um arquivo precisa ficar parado antes de ser catalogado, para não ler fotos ainda sendo gravadas |
 | `VITRAL_TRASH_RETENTION` | `P30D` | Quanto tempo uma foto fica na lixeira, podendo ser restaurada, antes de ser apagada para sempre |
+| `VITRAL_LOG_LEVEL` | `INFO` | Detalhe dos logs do Vitral: `INFO` registra cada evento; `DEBUG` acrescenta detalhes, como cada miniatura gerada |
+| `QUARKUS_HTTP_ACCESS_LOG_ENABLED` | `true` | Registra cada pedido HTTP no log; `false` desliga |
 
 ### Rodando sem Docker
 

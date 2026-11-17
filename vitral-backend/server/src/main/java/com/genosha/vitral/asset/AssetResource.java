@@ -52,7 +52,8 @@ public class AssetResource {
                           @QueryParam("cursor") String cursor) {
         AssetFilter filter = AssetFilter.parse(view).orElseThrow(() -> ApiException.badRequest("invalid_view",
                 "view must be timeline, favorites, archive or trash."));
-        return assets.list(currentUser.get().userId(), filter, parseLimit(limit), parseCursor(cursor));
+        return assets.list(currentUser.get().userId(), filter, PageParameters.limit(limit),
+                PageParameters.cursor(cursor));
     }
 
     /** Marks the asset as favorite or not, or moves it to the archive or back. */
@@ -245,34 +246,6 @@ public class AssetResource {
 
     private static ApiException assetNotFound() {
         return ApiException.notFound("asset_not_found", "Asset not found.");
-    }
-
-    private static int parseLimit(String value) {
-        if (value == null || value.isBlank()) {
-            return AssetService.DEFAULT_PAGE_SIZE;
-        }
-        try {
-            int limit = Integer.parseInt(value.strip());
-            if (limit >= 1 && limit <= AssetService.MAX_PAGE_SIZE) {
-                return limit;
-            }
-        } catch (NumberFormatException ignored) {
-            // Falls through to the error below.
-        }
-        throw ApiException.badRequest("invalid_limit",
-                "limit must be a whole number from 1 to " + AssetService.MAX_PAGE_SIZE + ".");
-    }
-
-    private static AssetCursor parseCursor(String value) {
-        if (value == null || value.isBlank()) {
-            return null;
-        }
-        try {
-            return AssetCursor.decode(value);
-        } catch (IllegalArgumentException e) {
-            throw ApiException.badRequest("invalid_cursor",
-                    "Use the nextCursor value from the previous page, unchanged.");
-        }
     }
 
     /** Accepts ISO-8601 with an offset, such as {@code 2024-07-14T19:32:10Z} or {@code 2024-07-14T16:32:10-03:00}. */

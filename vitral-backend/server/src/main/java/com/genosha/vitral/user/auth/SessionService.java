@@ -14,9 +14,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class SessionService {
+
+    private static final Logger LOG = Logger.getLogger(SessionService.class);
 
     /** lastUsedAt is refreshed at most this often, to avoid a database write per request. */
     private static final Duration LAST_USED_GRANULARITY = Duration.ofMinutes(1);
@@ -56,6 +59,7 @@ public class SessionService {
         Instant now = Timestamps.now();
         if (!session.expiresAt.isAfter(now)) {
             session.delete();
+            LOG.debugf("Expired session %s removed", session.id);
             return Optional.empty();
         }
         if (Duration.between(session.lastUsedAt, now).compareTo(LAST_USED_GRANULARITY) >= 0) {
@@ -77,5 +81,6 @@ public class SessionService {
             throw ApiException.notFound("session_not_found", "Session not found.");
         }
         session.delete();
+        LOG.infof("Session %s (%s) ended", session.id, session.deviceName == null ? "no device name" : session.deviceName);
     }
 }

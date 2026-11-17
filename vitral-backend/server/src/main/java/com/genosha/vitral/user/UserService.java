@@ -9,9 +9,12 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import java.util.List;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class UserService {
+
+    private static final Logger LOG = Logger.getLogger(UserService.class);
 
     @Inject
     PasswordHasher passwordHasher;
@@ -29,6 +32,7 @@ public class UserService {
         user.role = role;
         user.createdAt = Timestamps.now();
         user.persist();
+        LOG.infof("Account %s created (%s)", user.email, role);
         return user;
     }
 

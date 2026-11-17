@@ -10,9 +10,12 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 
 import java.util.Optional;
+import org.jboss.logging.Logger;
 
 @ApplicationScoped
 public class AuthService {
+
+    private static final Logger LOG = Logger.getLogger(AuthService.class);
 
     @Inject
     PasswordHasher passwordHasher;
@@ -30,6 +33,7 @@ public class AuthService {
     public LoginResult login(String email, String password, String deviceName) {
         String key = User.normalizeEmail(email);
         if (throttle.isLocked(key)) {
+            LOG.warnf("Login refused for %s: locked after too many failed attempts", key);
             throw ApiException.tooManyRequests("login_locked", "Too many failed attempts. Try again later.");
         }
         Optional<User> user = User.findByEmail(key);
@@ -42,9 +46,12 @@ public class AuthService {
         }
         if (!valid) {
             throttle.recordFailure(key);
+            // The e-mail is logged to spot attacks; whether it exists is not, so the log reveals no accounts.
+            LOG.warnf("Failed login for %s", key);
             throw ApiException.unauthorized("invalid_credentials", "E-mail or password is incorrect.");
         }
         throttle.reset(key);
+        LOG.infof("%s logged in%s", key, deviceName == null || deviceName.isBlank() ? "" : " from " + deviceName.strip());
         return issue(user.get(), deviceName);
     }
 
@@ -57,6 +64,7 @@ public class AuthService {
             throw ApiException.conflict("setup_done", "The server is already set up.");
         }
         User admin = users.create(email, displayName, password, Role.ADMIN);
+        LOG.infof("First-run setup: administrator %s created", admin.email);
         return issue(admin, "Setup");
     }
 

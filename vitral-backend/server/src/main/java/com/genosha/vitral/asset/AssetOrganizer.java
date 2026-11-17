@@ -69,9 +69,11 @@ public class AssetOrganizer {
             Asset asset = owned(ownerId, assetId);
             if (favorite != null) {
                 asset.favorite = favorite;
+                LOG.debugf("Asset %s %s favorites", assetId, favorite ? "added to" : "removed from");
             }
             if (archived != null) {
                 asset.archived = archived;
+                LOG.infof("Asset %s %s", assetId, archived ? "archived" : "taken out of the archive");
             }
             return asset;
         });
@@ -83,6 +85,7 @@ public class AssetOrganizer {
             Asset asset = owned(ownerId, assetId);
             if (asset.trashedAt == null) {
                 asset.trashedAt = Timestamps.now();
+                LOG.infof("Asset %s (%s) moved to the trash", assetId, asset.originalFileName);
             }
             return asset;
         });
@@ -92,6 +95,9 @@ public class AssetOrganizer {
     public Asset restore(UUID ownerId, UUID assetId) {
         return QuarkusTransaction.requiringNew().call(() -> {
             Asset asset = owned(ownerId, assetId);
+            if (asset.trashedAt != null) {
+                LOG.infof("Asset %s (%s) restored from the trash", assetId, asset.originalFileName);
+            }
             asset.trashedAt = null;
             return asset;
         });
@@ -146,6 +152,10 @@ public class AssetOrganizer {
             if (asset.folderId() == null) {
                 library.deleteQuietly(library.resolve(asset.relativePath()));
             }
+        }
+        for (Removed asset : removed) {
+            LOG.infof("Asset %s deleted for good; %s", asset.assetId(), asset.folderId() == null
+                    ? "its original was deleted from the library" : "its file stays in the watched folder");
         }
         return removed.size();
     }

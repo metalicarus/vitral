@@ -250,6 +250,7 @@ public class FolderScanner {
                 UUID assetId = null;
                 if (media == null) {
                     unsupported++;
+                    LOG.debugf("%s: %s is not a photo Vitral accepts", root, relativePath);
                 } else if (sameContent != null) {
                     assetId = sameContent.id;
                     if (sameContent == atThisPath) {
@@ -259,14 +260,17 @@ public class FolderScanner {
                         sameContent.relativePath = relativePath;
                         sameContent.originalFileName = file.getFileName().toString();
                         moved++;
+                        LOG.debugf("%s: asset %s moved to %s", root, sameContent.id, relativePath);
                     } else {
                         linked++;
+                        LOG.debugf("%s: %s has the same content as asset %s", root, relativePath, sameContent.id);
                     }
                 } else if (atThisPath != null) {
                     atThisPath.describe(media, sha256, size, date(media, modifiedAt));
                     assetId = atThisPath.id;
                     toThumbnail.add(atThisPath.id);
                     updated++;
+                    LOG.debugf("%s: %s changed; asset %s updated", root, relativePath, atThisPath.id);
                 } else {
                     Asset asset = new Asset();
                     asset.ownerId = ownerId;
@@ -279,6 +283,7 @@ public class FolderScanner {
                     assetId = asset.id;
                     toThumbnail.add(asset.id);
                     added++;
+                    LOG.debugf("%s: %s cataloged as asset %s", root, relativePath, asset.id);
                 }
                 record(relativePath, size, modifiedAt, sha256, assetId);
             });

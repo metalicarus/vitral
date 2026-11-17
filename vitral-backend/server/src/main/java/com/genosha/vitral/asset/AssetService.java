@@ -11,7 +11,6 @@ import com.genosha.vitral.storage.DerivativeStorage;
 import com.genosha.vitral.storage.FileName;
 import com.genosha.vitral.storage.LibraryStorage;
 import com.genosha.vitral.storage.OriginalFiles;
-import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -79,6 +78,7 @@ public class AssetService {
         UploadResult result = QuarkusTransaction.requiringNew().call(() -> {
             Optional<Asset> existing = Asset.findByOwnerAndHash(ownerId, sha256);
             if (existing.isPresent()) {
+                LOG.debugf("Upload of %s matched asset %s, which the user already had", name, existing.get().id);
                 return new UploadResult(existing.get(), false);
             }
             LibraryStorage.StoredFile stored = storage.store(uploadedFile, ownerId, date.folderDate(), name,
@@ -101,6 +101,8 @@ public class AssetService {
         if (result.created()) {
             // Only after the commit, so the worker is sure to find the new row.
             thumbnails.enqueue(result.asset().id);
+            LOG.infof("Uploaded %s as asset %s (%s, %d bytes, dated %s by %s)", name, result.asset().id,
+                    media.mimeType(), size, date.takenAt(), date.source());
         }
         return result;
     }
@@ -165,13 +167,35 @@ public class AssetService {
      * <p>Fetches one extra row to learn whether another page exists, instead of counting.
      */
     public AssetPage list(UUID ownerId, AssetFilter filter, int limit, AssetCursor after) {
+        return page("ownerId = ?1 and " + filter.condition(), List.of(ownerId), limit, after);
+    }
+
+    /**
+     * The photos of one of the owner's albums, newest first, leaving out the ones in the trash
+     * (they come back if restored). Archived photos stay visible in albums.
+     */
+    public AssetPage listInAlbum(UUID ownerId, UUID albumId, int limit, AssetCursor after) {
+        return page("ownerId = ?1 and trashedAt is null and id in"
+                + " (select aa.key.assetId from AlbumAsset aa where aa.key.albumId = ?2)", List.of(ownerId, albumId),
+                limit, after);
+    }
+
+    /**
+     * One page of the assets matching {@code where}, whose positional parameters are {@code params}.
+     * The cursor's condition is appended with the next parameter numbers.
+     */
+    private AssetPage page(String where, List<Object> params, int limit, AssetCursor after) {
         Sort newestFirst = Sort.descending("takenAt", "id");
-        String where = "ownerId = ?1 and " + filter.condition();
-        PanacheQuery<Asset> query = after == null
-                ? Asset.find(where, newestFirst, ownerId)
-                : Asset.find(where + " and (takenAt < ?2 or (takenAt = ?2 and id < ?3))", newestFirst,
-                ownerId, Instant.ofEpochMilli(after.takenAtMillis()), after.id());
-        List<Asset> rows = query.page(0, limit + 1).list();
+        List<Object> values = new ArrayList<>(params);
+        String query = where;
+        if (after != null) {
+            int at = values.size() + 1;
+            int id = values.size() + 2;
+            query += " and (takenAt < ?" + at + " or (takenAt = ?" + at + " and id < ?" + id + "))";
+            values.add(Instant.ofEpochMilli(after.takenAtMillis()));
+            values.add(after.id());
+        }
+        List<Asset> rows = Asset.<Asset>find(query, newestFirst, values.toArray()).page(0, limit + 1).list();
 
         boolean hasMore = rows.size() > limit;
         List<Asset> page = hasMore ? rows.subList(0, limit) : rows;

@@ -167,6 +167,7 @@ public class FolderWatcher {
             key.pollEvents();
             UUID folderId = watchedDirectories.get(key);
             if (folderId != null) {
+                LOG.debugf("Change noticed in %s; scanning folder %s shortly", key.watchable(), folderId);
                 requestScan(folderId, config.imports().settle());
             }
             if (!key.reset()) {

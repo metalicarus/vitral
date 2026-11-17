@@ -355,6 +355,57 @@ class VitralApiTest {
                 "POST /api/v1/assets/trash/empty"), calls);
     }
 
+    @Test
+    void managesAlbums() throws IOException {
+        UUID album = UUID.randomUUID();
+        UUID photo = UUID.randomUUID();
+        List<String> calls = new ArrayList<>();
+        String albumJson = """
+                {"id":"%s","name":"Férias","coverAssetId":"%s","photos":2,"createdAt":"2026-11-17T10:00:00Z",
+                 "updatedAt":"2026-11-17T10:00:00Z","contains":true}""".formatted(album, photo);
+        server.createContext("/api/v1/albums", exchange -> {
+            String body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+            String path = exchange.getRequestURI().getPath().replace(album.toString(), "A");
+            String query = exchange.getRequestURI().getRawQuery();
+            calls.add(exchange.getRequestMethod() + " " + path + (query == null ? "" : "?" + query.replace(photo.toString(), "P"))
+                    + (body.isEmpty() ? "" : " " + body.replace(photo.toString(), "P")));
+            if (exchange.getRequestMethod().equals("DELETE")) {
+                exchange.sendResponseHeaders(204, -1);
+                exchange.close();
+            } else if (path.endsWith("/assets") && exchange.getRequestMethod().equals("GET")) {
+                write(exchange, 200, "{\"items\":[],\"nextCursor\":null}");
+            } else if (path.contains("/assets")) {
+                write(exchange, 200, "{\"changed\":1}");
+            } else if (path.equals("/api/v1/albums") && exchange.getRequestMethod().equals("GET")) {
+                write(exchange, 200, "[" + albumJson + "]");
+            } else {
+                write(exchange, path.equals("/api/v1/albums") ? 201 : 200, albumJson);
+            }
+        });
+
+        List<Models.Album> albums = api.listAlbums(photo);
+        api.createAlbum("Férias");
+        api.renameAlbum(album, "Praia");
+        api.setAlbumCover(album, photo);
+        api.albumPhotos(album, 20, null);
+        int added = api.addToAlbum(album, List.of(photo));
+        api.removeFromAlbum(album, List.of(photo));
+        api.deleteAlbum(album);
+
+        assertEquals(Boolean.TRUE, albums.getFirst().contains());
+        assertEquals(2, albums.getFirst().photos());
+        assertEquals(1, added);
+        assertEquals(List.of(
+                "GET /api/v1/albums?containing=P",
+                "POST /api/v1/albums {\"name\":\"Férias\"}",
+                "PATCH /api/v1/albums/A {\"name\":\"Praia\"}",
+                "PATCH /api/v1/albums/A {\"coverAssetId\":\"P\"}",
+                "GET /api/v1/albums/A/assets?limit=20",
+                "POST /api/v1/albums/A/assets {\"assetIds\":[\"P\"]}",
+                "POST /api/v1/albums/A/assets/remove {\"assetIds\":[\"P\"]}",
+                "DELETE /api/v1/albums/A"), calls);
+    }
+
     private static String assetJson(UUID id) {
         return """
                 {"id":"%s","type":"PHOTO","originalFileName":"IMG.jpg","mimeType":"image/jpeg","sizeBytes":10,

@@ -1,27 +1,89 @@
+<div align="center">
+
 # Vitral
 
+**Suas fotos, no seu servidor.**
+
+Um gerenciador de fotos self-hosted e totalmente open source: uma alternativa ao Google Fotos
+que roda num computador seu, sem entregar sua biblioteca a ninguém.
+
 [![CI](https://github.com/metalicarus/vitral/actions/workflows/ci.yml/badge.svg)](https://github.com/metalicarus/vitral/actions/workflows/ci.yml)
+![Java 25](https://img.shields.io/badge/Java-25%20LTS-orange)
+![Quarkus](https://img.shields.io/badge/Quarkus-3.33%20LTS-4695eb)
+![JavaFX](https://img.shields.io/badge/JavaFX-25-blue)
+![Licença](https://img.shields.io/badge/licen%C3%A7a-AGPL--3.0%20(proposta)-lightgrey)
 
-**Suas fotos, no seu servidor.** O Vitral é um gerenciador de fotos e vídeos self-hosted e totalmente open source: uma alternativa ao Google Fotos que roda em um servidor seu, sem entregar sua biblioteca a terceiros.
+![A galeria do Vitral: fotos agrupadas por mês](docs/images/galeria.jpg)
 
-> **Status:** em desenvolvimento inicial. Ainda não há versão utilizável.
+</div>
 
-## Partes do projeto
+> **Status:** em desenvolvimento. O servidor e o client desktop já cobrem o uso do dia a dia com fotos;
+> ainda não há uma versão publicada para instalar (veja [o que vem depois](#o-que-vem-depois)).
 
-| Pasta | O que é | Tecnologia | Status |
-| --- | --- | --- | --- |
-| [`vitral-backend/`](vitral-backend/) | Servidor: armazena, cataloga e processa as fotos e expõe a API | Java 25, Quarkus | Fundação (M0) em andamento |
-| [`vitral-client/`](vitral-client/) | Aplicativo desktop para navegar pelas fotos do servidor | Java 25, JavaFX, AtlantaFX | Primeira versão: galeria, visualizador, envio de fotos e administração |
-| `vitral-frontend/` | Interface web para navegar, organizar e compartilhar as fotos | SvelteKit | Planejado |
+## O que já dá para fazer
 
-Mais adiante, um app mobile vai cuidar do backup automático do celular, usando a mesma API do servidor. Até lá, o backup pode ser feito com ferramentas de sincronização como o Syncthing, apontando para uma pasta que o servidor monitora.
+### Uma galeria rápida, mês a mês
+
+As fotos aparecem da mais recente para a mais antiga, agrupadas por mês, e mais fotos carregam conforme
+você rola. Os botões no topo trocam entre **Fotos**, **Favoritas**, **Álbuns**, **Arquivo** e **Lixeira**.
+O tema claro ou escuro acompanha o do sistema.
+
+<p align="center">
+  <img src="docs/images/galeria-escura.jpg" alt="A galeria no tema escuro" width="80%">
+</p>
+
+### Cada foto em tela cheia, com os detalhes
+
+Um clique abre a foto do maior tamanho que a janela permite. A tecla **I** mostra câmera, lente,
+exposição, o local onde ela foi tirada (com um link para o mapa), dimensões e tamanho. Dali mesmo dá para
+favoritar, pôr num álbum, arquivar, mandar para a lixeira ou baixar o original.
+
+![O visualizador com o painel de detalhes](docs/images/visualizador.jpg)
+
+### Álbuns
+
+Junte fotos em álbuns, escolha a capa e navegue por cada um como uma galeria própria. Apagar um álbum
+nunca apaga as fotos; uma foto na lixeira some dos álbuns e volta se for restaurada.
+
+| Os álbuns, com suas capas | Um álbum aberto |
+| --- | --- |
+| ![A lista de álbuns](docs/images/albuns.jpg) | ![Um álbum aberto](docs/images/album.jpg) |
+
+### Backup sem duplicar nada
+
+- **Envio pelo client:** escolha fotos ou uma pasta inteira, ou arraste para a janela. O client pergunta ao
+  servidor o que ele já tem (pelo SHA-256 de cada arquivo) e só envia o que falta.
+- **Pastas monitoradas:** aponte o Vitral para a pasta que o Syncthing mantém sincronizada com o celular.
+  As fotos novas aparecem em segundos, catalogadas onde estão: o Vitral só lê a pasta, nunca altera nem
+  apaga nada nela.
+
+### Para a família toda
+
+Num servidor novo, a própria tela de login cria a conta de administrador. Depois, a área de
+administração cria as contas da família e cadastra as pastas monitoradas, sem nenhum comando.
+
+| Entrar no servidor | Administração |
+| --- | --- |
+| ![A tela de login](docs/images/login.jpg) | ![A área de administração](docs/images/administracao.jpg) |
 
 ## Princípios
 
-- **Seus dados, seu servidor:** nenhuma chamada a serviços externos por padrão e nenhuma telemetria.
+- **Seus dados, seu servidor:** nenhuma chamada a serviços externos por padrão e nenhuma telemetria. O
+  único link para fora é o "Ver no mapa", e só quando você clica.
 - **Originais intocáveis:** o Vitral nunca altera um arquivo original.
 - **Leve primeiro:** roda sem GPU e em hardware modesto, como um PC antigo, um NAS ou um Raspberry Pi.
 - **Formatos abertos:** os originais ficam em pastas comuns, legíveis sem o Vitral.
+
+## Partes do projeto
+
+| Pasta | O que é | Tecnologia |
+| --- | --- | --- |
+| [`vitral-backend/`](vitral-backend/) | O servidor: guarda, cataloga e processa as fotos e expõe a API REST | Java 25, Quarkus, SQLite, libvips |
+| [`vitral-client/`](vitral-client/) | O aplicativo desktop: galeria, visualizador, álbuns, envio e administração | Java 25, JavaFX, AtlantaFX |
+| `vitral-frontend/` | Interface web, no navegador (planejada) | SvelteKit |
+
+Mais adiante, um app mobile vai cuidar do backup automático do celular, usando a mesma API. Até lá, o
+backup do celular funciona com o Syncthing e as pastas monitoradas.
 
 ## Começando
 
@@ -32,32 +94,48 @@ cd vitral-backend/server
 mvn quarkus:dev
 ```
 
-A API sobe em `http://localhost:8080`, com documentação interativa em `/q/swagger-ui`. O [README do servidor](vitral-backend/README.md) tem a arquitetura, a stack, o roadmap e os primeiros passos com a API, e a pasta `vitral-backend/` traz uma coleção pronta para o Insomnia em `insomnia.json`.
-
-Depois, abra o client desktop em outro terminal. Num servidor novo, a própria tela de login cria a conta de administrador:
+A API sobe em `http://localhost:8080`, com documentação interativa em `/q/swagger-ui`. Em outro terminal,
+abra o client. Num servidor novo, a própria tela de login cria a conta de administrador:
 
 ```bash
 cd vitral-client
 mvn javafx:run
 ```
 
-O [README do client](vitral-client/README.md) explica o que ele já faz.
+Os detalhes ficam nos READMEs de cada parte: o [do servidor](vitral-backend/README.md) traz a arquitetura,
+a configuração, os logs, o Docker e a API; o [do client](vitral-client/README.md) descreve cada tela.
 
-## Integração contínua
+## O que vem depois
 
-A cada push na `main` e a cada pull request, o GitHub Actions faz três verificações em paralelo, e o resultado aparece no próprio PR, antes do merge:
+**Já feito:** contas e sessões, upload com deduplicação, miniaturas e prévias, metadados completos
+(câmera, lente, exposição e GPS), pastas monitoradas, favoritos, arquivo e lixeira, álbuns, logs
+detalhados no servidor, e o client desktop com tudo isso.
 
-- **Servidor:** roda os testes, com o libvips instalado para os testes de miniatura não serem pulados.
-- **Imagem Docker:** constrói a imagem do servidor, sem publicá-la, para garantir que o `docker compose up` continua funcionando.
-- **Client desktop:** roda os testes do client.
+**Próximos passos:**
+- Compartilhamento de álbuns entre as contas da família
+- Nome da cidade a partir da posição GPS, com uma base offline
+- Seleção de várias fotos de uma vez na galeria
+- Interface web e app mobile com backup automático
 
-O workflow fica em [`.github/workflows/ci.yml`](.github/workflows/ci.yml).
+**Deixado para depois, de propósito:**
+- **Vídeos.** Processar vídeo (miniaturas, conversão para um formato que toque em qualquer lugar) exige o
+  FFmpeg instalado no servidor, uma dependência grande, e o JavaFX ainda tem limitações para reproduzir
+  alguns formatos. Por isso o foco, por enquanto, é fazer as fotos funcionarem muito bem; o client
+  ignora vídeos ao enviar e o servidor os recusa. A decisão está registrada na
+  [ADR 0005](vitral-backend/docs/adr/0005-videos-adiados.md).
+- **Instaladores e versões publicadas:** imagem Docker pronta para baixar, instaladores do client para
+  Linux, Windows e macOS e um guia para instalar num servidor remoto, com HTTPS. Vêm depois das features.
 
-O [Dependabot](.github/dependabot.yml) abre, toda semana, pull requests com as versões novas das dependências, e cada um passa pelo CI. As bibliotecas Java recebem só versões de correção, porque o projeto segue linhas LTS (Java 25, Quarkus 3.33, JavaFX 25); a troca de linha é uma decisão feita à mão. As actions do CI recebem qualquer versão. As imagens Docker ficam de fora: as tags usadas já recebem as correções a cada build, e o Dependabot confundiria a troca de versão do Java com uma correção.
+## Qualidade
 
-## Decisões de arquitetura
+A cada push na `main` e a cada pull request, o GitHub Actions roda os testes do servidor (com o libvips,
+para os testes de miniatura não serem pulados), constrói a imagem Docker e roda os testes do client; o
+resultado aparece no próprio PR. O [Dependabot](.github/dependabot.yml) propõe toda semana as versões de
+correção das dependências, e cada proposta passa pelo CI.
 
-As decisões importantes ficam registradas como ADRs em [`vitral-backend/docs/adr/`](vitral-backend/docs/adr/).
+As decisões de arquitetura ficam registradas como ADRs em [`vitral-backend/docs/adr/`](vitral-backend/docs/adr/).
+
+As imagens das capturas de tela são paisagens desenhadas por um script, não fotos de verdade.
 
 ## Licença
 

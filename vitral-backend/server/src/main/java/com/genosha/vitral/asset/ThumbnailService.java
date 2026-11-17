@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -138,6 +139,7 @@ public class ThumbnailService {
             return;
         }
         Path original = originals.resolve(asset.folderId, asset.relativePath);
+        Instant started = Instant.now();
         Path previewTemp = null;
         Path thumbnailTemp = null;
         try {
@@ -151,6 +153,8 @@ public class ThumbnailService {
             derivatives.install(previewTemp, derivatives.preview(asset.ownerId, asset.id));
             derivatives.install(thumbnailTemp, derivatives.thumbnail(asset.ownerId, asset.id));
             markReady(assetId, size);
+            LOG.debugf("Thumbnail and preview of asset %s generated in %d ms", assetId,
+                    Duration.between(started, Instant.now()).toMillis());
         } catch (VipsException e) {
             LOG.warnf("Could not generate thumbnails for asset %s: %s", assetId, e.getMessage());
             markFailed(assetId, e.getMessage());

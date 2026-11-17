@@ -6,7 +6,7 @@ import com.genosha.vitral.client.ClientSettings;
 import com.genosha.vitral.client.api.ApiException;
 import com.genosha.vitral.client.api.Models.Asset;
 import com.genosha.vitral.client.api.Models.Camera;
-import com.genosha.vitral.client.api.Models.LibraryView;
+import com.genosha.vitral.client.api.Models.Album;
 import com.genosha.vitral.client.api.Models.Location;
 import com.genosha.vitral.client.api.Models.TakenAtSource;
 import com.genosha.vitral.client.api.Models.ThumbnailStatus;
@@ -41,6 +41,8 @@ import java.io.File;
 import java.nio.file.Path;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CompletableFuture;
@@ -54,7 +56,8 @@ import java.util.concurrent.CompletionException;
  * thumbnail already in memory is shown enlarged, so something appears at once.
  *
  * <p>Keys: left and right arrows move between photos, I shows the details, F marks a
- * favorite, Delete moves to the trash (or, in the trash, deletes for good), Esc closes.
+ * favorite, A puts it in albums, Delete moves to the trash (or, in the trash, deletes for
+ * good), Esc closes.
  */
 final class ViewerView extends StackPane {
 
@@ -73,13 +76,16 @@ final class ViewerView extends StackPane {
 
         void sessionExpired();
 
-        /** Which view the photos come from; in the trash, the actions are restore and delete. */
-        LibraryView view();
+        /** Whether the photos come from the trash, where the actions are restore and delete. */
+        boolean inTrash();
+
+        /** The album the photos come from, or null; it adds "remove from album" and "use as cover". */
+        Album album();
 
         /** The server changed a photo; the gallery replaces it, or drops it if it left the view. */
         void changed(Asset updated);
 
-        /** The photo was deleted for good. */
+        /** The photo left the list: deleted for good, or taken out of the open album. */
         void deleted(Asset asset);
     }
 
@@ -111,6 +117,9 @@ final class ViewerView extends StackPane {
     private final Button trashButton = actionButton(Feather.TRASH_2, "Mover para a lixeira (Delete)");
     private final Button restoreButton = new Button("Restaurar", new FontIcon(Feather.ROTATE_CCW));
     private final Button deleteButton = new Button("Apagar para sempre", new FontIcon(Feather.TRASH));
+    private final Button albumButton = actionButton(Feather.BOOK_OPEN, "Adicionar a um álbum (A)");
+    private final Button coverButton = actionButton(Feather.IMAGE, "Usar como capa do álbum");
+    private final Button leaveAlbumButton = actionButton(Feather.FOLDER_MINUS, "Tirar deste álbum");
     private final VBox info = new VBox(16);
     private final PauseTransition statusTimeout = new PauseTransition(Duration.seconds(6));
     private final PauseTransition previewRetry = new PauseTransition(Duration.seconds(3));
@@ -185,18 +194,25 @@ final class ViewerView extends StackPane {
         restoreButton.setOnAction(event -> restore());
         deleteButton.getStyleClass().addAll(Styles.FLAT, "viewer-danger");
         deleteButton.setOnAction(event -> deleteForGood());
-        boolean inTrash = host.view() == LibraryView.TRASH;
-        for (Node node : new Node[]{favoriteButton, archiveButton, trashButton}) {
+        albumButton.setOnAction(event -> pickAlbums());
+        coverButton.setOnAction(event -> useAsCover());
+        leaveAlbumButton.setOnAction(event -> leaveAlbum());
+        boolean inTrash = host.inTrash();
+        for (Node node : new Node[]{favoriteButton, albumButton, archiveButton, trashButton}) {
             node.setVisible(!inTrash);
             node.setManaged(!inTrash);
+        }
+        for (Node node : new Node[]{coverButton, leaveAlbumButton}) {
+            node.setVisible(host.album() != null);
+            node.setManaged(host.album() != null);
         }
         for (Node node : new Node[]{restoreButton, deleteButton}) {
             node.setVisible(inTrash);
             node.setManaged(inTrash);
         }
 
-        HBox bar = new HBox(12, close, names, new Spacer(), status, favoriteButton, archiveButton, trashButton,
-                restoreButton, deleteButton, infoToggle, download);
+        HBox bar = new HBox(12, close, names, new Spacer(), status, favoriteButton, albumButton, coverButton,
+                leaveAlbumButton, archiveButton, trashButton, restoreButton, deleteButton, infoToggle, download);
         bar.setAlignment(Pos.CENTER_LEFT);
         bar.setPadding(new Insets(10, 16, 10, 16));
         bar.getStyleClass().add("viewer-bar");
@@ -233,12 +249,17 @@ final class ViewerView extends StackPane {
             case ESCAPE -> close();
             case I -> infoToggle.setSelected(!infoToggle.isSelected());
             case F -> {
-                if (host.view() != LibraryView.TRASH) {
+                if (!host.inTrash()) {
                     toggleFavorite();
                 }
             }
+            case A -> {
+                if (!host.inTrash()) {
+                    pickAlbums();
+                }
+            }
             case DELETE -> {
-                if (host.view() == LibraryView.TRASH) {
+                if (host.inTrash()) {
                     deleteForGood();
                 } else {
                     moveToTrash();
@@ -350,6 +371,42 @@ final class ViewerView extends StackPane {
     private void moveToTrash() {
         Asset asset = current();
         act(() -> api.trash(asset.id()), "Foto movida para a lixeira; dá para restaurar por 30 dias");
+    }
+
+    /** Opens the album list for the photo; in an open album, unmarking it takes the photo out of the list. */
+    private void pickAlbums() {
+        Asset asset = current();
+        Set<UUID> containing = AlbumPicker.show(api, asset, getScene().getWindow());
+        Album album = host.album();
+        if (album != null && !containing.contains(album.id())) {
+            host.deleted(asset);
+            afterListChanged(asset, "Foto tirada do álbum “" + album.name() + "”");
+        }
+        requestFocus();
+    }
+
+    private void leaveAlbum() {
+        Asset asset = current();
+        Album album = host.album();
+        if (busy || album == null) {
+            return;
+        }
+        busy = true;
+        Background.run(() -> api.removeFromAlbum(album.id(), List.of(asset.id())), changed -> {
+            busy = false;
+            host.deleted(asset);
+            afterListChanged(asset, "Foto tirada do álbum “" + album.name() + "”; ela continua na biblioteca");
+        }, this::actionFailed);
+    }
+
+    private void useAsCover() {
+        Asset asset = current();
+        Album album = host.album();
+        if (album == null) {
+            return;
+        }
+        Background.run(() -> api.setAlbumCover(album.id(), asset.id()),
+                updated -> showStatus("Agora é a capa de “" + updated.name() + "”", true), this::actionFailed);
     }
 
     private void restore() {
