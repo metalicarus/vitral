@@ -16,7 +16,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
         <!-- JavaFX 25 is the long-term support line that matches Java 25. -->
-        <javafx.version>25.0.5</javafx.version>
+        <javafx.version>25.0.5.1</javafx.version>
         <atlantafx.version>3.0.0</atlantafx.version>
         <ikonli.version>12.4.0</ikonli.version>
         <jackson.version>2.22.4</jackson.version>
